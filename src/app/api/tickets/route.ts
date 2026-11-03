@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import { attachmentMeta, validateAttachment } from "@/lib/ticket-attachments";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";

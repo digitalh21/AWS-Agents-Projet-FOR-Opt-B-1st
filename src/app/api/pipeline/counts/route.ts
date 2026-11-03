@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import { and, count, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { leads } from "@/db/schema";

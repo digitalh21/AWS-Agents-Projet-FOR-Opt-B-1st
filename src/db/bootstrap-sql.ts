@@ -233,7 +233,7 @@ CREATE TABLE IF NOT EXISTS "lead_requests" (
 	"decided_at" timestamp with time zone
 );
 
-CREATE TABLE IF NOT EXISTS "leads" (
+CREATE TABLE IF NOT EXISTS "pipeline_leads" (
 	"id" bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 	"lead_code" text,
 	"niche_id" integer,
@@ -424,31 +424,30 @@ CREATE INDEX IF NOT EXISTS "chat_pair_idx" ON "chat_messages" USING btree ("from
 CREATE UNIQUE INDEX IF NOT EXISTS "daily_activity_user_day_uq" ON "daily_activity" USING btree ("user_id","day");
 CREATE INDEX IF NOT EXISTS "decision_notice_user_idx" ON "decision_notices" USING btree ("user_id");
 CREATE UNIQUE INDEX IF NOT EXISTS "field_perm_uq" ON "field_permissions" USING btree ("field_key","role");
-CREATE INDEX IF NOT EXISTS "leads_status_idx" ON "leads" USING btree ("status");
-CREATE INDEX IF NOT EXISTS "leads_niche_idx" ON "leads" USING btree ("niche_id");
-CREATE INDEX IF NOT EXISTS "leads_agent_idx" ON "leads" USING btree ("assigned_agent_id");
-CREATE INDEX IF NOT EXISTS "leads_created_idx" ON "leads" USING btree ("created_at");
-CREATE INDEX IF NOT EXISTS "leads_agent_status_idx" ON "leads" USING btree ("assigned_agent_id","status");
+CREATE INDEX IF NOT EXISTS "leads_status_idx" ON "pipeline_leads" USING btree ("status");
+CREATE INDEX IF NOT EXISTS "leads_niche_idx" ON "pipeline_leads" USING btree ("niche_id");
+CREATE INDEX IF NOT EXISTS "leads_agent_idx" ON "pipeline_leads" USING btree ("assigned_agent_id");
+CREATE INDEX IF NOT EXISTS "leads_created_idx" ON "pipeline_leads" USING btree ("created_at");
+CREATE INDEX IF NOT EXISTS "leads_agent_status_idx" ON "pipeline_leads" USING btree ("assigned_agent_id","status");
 CREATE UNIQUE INDEX IF NOT EXISTS "system_settings_key_uq" ON "system_settings" USING btree ("key");
 CREATE INDEX IF NOT EXISTS "ticket_msg_ticket_idx" ON "ticket_messages" USING btree ("ticket_id");
 CREATE UNIQUE INDEX IF NOT EXISTS "tickets_number_uq" ON "tickets" USING btree ("ticket_number");
 CREATE INDEX IF NOT EXISTS "tickets_user_idx" ON "tickets" USING btree ("user_id");
 CREATE UNIQUE INDEX IF NOT EXISTS "users_email_uq" ON "users" USING btree ("email");
 CREATE INDEX IF NOT EXISTS "users_role_idx" ON "users" USING btree ("role");
-CREATE INDEX IF NOT EXISTS "leads_updated_idx" ON "leads" ("updated_at" DESC, "id" DESC);
-CREATE INDEX IF NOT EXISTS "leads_niche_status_idx" ON "leads" ("niche_id", "status");
+CREATE INDEX IF NOT EXISTS "leads_updated_idx" ON "pipeline_leads" ("updated_at" DESC, "id" DESC);
+CREATE INDEX IF NOT EXISTS "leads_niche_status_idx" ON "pipeline_leads" ("niche_id", "status");
 
 -- Extended lead structure (custom lead form columns, idempotent)
-ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "title" text;
-ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "reviews" integer DEFAULT 0 NOT NULL;
-ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "niche_category" text;
-ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "mobile_no" text;
-ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "status_service" text;
-ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "lead_status" text;
-ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "lead_close_amount" numeric(12, 2);
+ALTER TABLE "pipeline_leads" ADD COLUMN IF NOT EXISTS "title" text;
+ALTER TABLE "pipeline_leads" ADD COLUMN IF NOT EXISTS "reviews" integer DEFAULT 0 NOT NULL;
+ALTER TABLE "pipeline_leads" ADD COLUMN IF NOT EXISTS "niche_category" text;
+ALTER TABLE "pipeline_leads" ADD COLUMN IF NOT EXISTS "mobile_no" text;
+ALTER TABLE "pipeline_leads" ADD COLUMN IF NOT EXISTS "status_service" text;
+ALTER TABLE "pipeline_leads" ADD COLUMN IF NOT EXISTS "lead_status" text;
+ALTER TABLE "pipeline_leads" ADD COLUMN IF NOT EXISTS "lead_close_amount" numeric(12, 2);
 
--- Broadcast media formats (video -> auto-embedded iframe, audio -> player)
-ALTER TABLE "broadcasts" ADD COLUMN IF NOT EXISTS "video_url" text;
+-- Broadcast media formats (audio -> player)
 ALTER TABLE "broadcasts" ADD COLUMN IF NOT EXISTS "audio_url" text;
 
 CREATE TABLE IF NOT EXISTS "broadcast_comments" (
@@ -465,7 +464,6 @@ CREATE TABLE IF NOT EXISTS "broadcast_templates" (
 	"title" text NOT NULL,
 	"body" text NOT NULL,
 	"image_url" text,
-	"video_url" text,
 	"audio_url" text,
 	"kind" text DEFAULT 'POPUP' NOT NULL,
 	"created_by" uuid,
@@ -482,7 +480,7 @@ ALTER TABLE "broadcasts" ADD COLUMN IF NOT EXISTS "broadcast_type" text DEFAULT 
 UPDATE "broadcasts" SET "broadcast_type" = 'site_banner' WHERE "kind" = 'BANNER' AND "broadcast_type" = 'dismissible_popup';
 UPDATE "broadcasts" SET "broadcast_type" = 'strict_lock' WHERE "kind" = 'POPUP' AND "require_acknowledgment" = true AND "broadcast_type" = 'dismissible_popup';
 
-ALTER TABLE "leads" ALTER COLUMN "niche_id" DROP NOT NULL;
+ALTER TABLE "pipeline_leads" ALTER COLUMN "niche_id" DROP NOT NULL;
 
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "daily_lead_limit" integer;
 
@@ -504,7 +502,91 @@ ALTER TABLE "lead_history" ADD COLUMN IF NOT EXISTS "note" text;
 CREATE INDEX IF NOT EXISTS "lead_history_lead_idx" ON "lead_history" USING btree ("lead_id");
 CREATE INDEX IF NOT EXISTS "lead_history_actor_idx" ON "lead_history" USING btree ("changed_by");
 
-ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "backend_check" boolean DEFAULT false NOT NULL;
-ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "backend_check_note" text;
-ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "backend_checked_at" timestamp with time zone;
+ALTER TABLE "pipeline_leads" ADD COLUMN IF NOT EXISTS "backend_check" boolean DEFAULT false NOT NULL;
+ALTER TABLE "pipeline_leads" ADD COLUMN IF NOT EXISTS "backend_check_note" text;
+ALTER TABLE "pipeline_leads" ADD COLUMN IF NOT EXISTS "backend_checked_at" timestamp with time zone;
+
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "daily_click_quota" integer;
+
+CREATE TABLE IF NOT EXISTS "agent_click_usage" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" uuid NOT NULL,
+	"day" text NOT NULL,
+	"clicks" integer DEFAULT 0 NOT NULL,
+	"actions" integer DEFAULT 0 NOT NULL,
+	"navigations" integer DEFAULT 0 NOT NULL,
+	"lead_opens" integer DEFAULT 0 NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "agent_click_usage_user_day_uq" ON "agent_click_usage" USING btree ("user_id", "day");
+
+CREATE TABLE IF NOT EXISTS "lead_open_logs" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"lead_id" integer NOT NULL,
+	"user_id" uuid NOT NULL,
+	"action" text DEFAULT 'OPEN' NOT NULL,
+	"opened_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"closed_at" timestamp with time zone,
+	"duration_ms" integer,
+	"path" text,
+	"platform" text
+);
+CREATE INDEX IF NOT EXISTS "lead_open_logs_user_idx" ON "lead_open_logs" USING btree ("user_id");
+CREATE INDEX IF NOT EXISTS "lead_open_logs_lead_idx" ON "lead_open_logs" USING btree ("lead_id");
+CREATE INDEX IF NOT EXISTS "lead_open_logs_opened_idx" ON "lead_open_logs" USING btree ("opened_at");
+
+CREATE TABLE IF NOT EXISTS "agent_activity_events" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" uuid NOT NULL,
+	"session_id" text,
+	"event_type" text NOT NULL,
+	"target" text,
+	"path" text,
+	"meta" jsonb,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+CREATE INDEX IF NOT EXISTS "agent_activity_events_user_idx" ON "agent_activity_events" USING btree ("user_id");
+CREATE INDEX IF NOT EXISTS "agent_activity_events_created_idx" ON "agent_activity_events" USING btree ("created_at");
+CREATE INDEX IF NOT EXISTS "agent_activity_events_session_idx" ON "agent_activity_events" USING btree ("session_id");
+
+CREATE TABLE IF NOT EXISTS "agent_sessions" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" uuid NOT NULL,
+	"session_id" text NOT NULL,
+	"started_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"last_seen_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"active_seconds" integer DEFAULT 0 NOT NULL,
+	"ended_at" timestamp with time zone,
+	"platform" text
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "agent_sessions_session_uq" ON "agent_sessions" USING btree ("session_id");
+CREATE INDEX IF NOT EXISTS "agent_sessions_user_idx" ON "agent_sessions" USING btree ("user_id");
+
+-- Strict lead sheet: table "leads" has EXACTLY these 18 columns.
+CREATE TABLE IF NOT EXISTS "leads" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"lead_code" varchar(40) NOT NULL UNIQUE,
+	"city_keyword" text,
+	"gmap_link" text,
+	"title" text NOT NULL,
+	"rating" numeric(3, 1) DEFAULT 0,
+	"reviews" integer DEFAULT 0,
+	"niche_or_category" text,
+	"opens_at" text,
+	"mobile_no" text,
+	"website_status" text,
+	"website" text,
+	"status_service" text,
+	"call_status" text,
+	"lead_status" text,
+	"lead_close_amount" numeric(12, 2),
+	"assigned_agent_id" text,
+	"created_at" timestamp with time zone DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS "crm_leads_agent_idx" ON "leads" USING btree ("assigned_agent_id");
+
+-- Video features were removed: clean up legacy video storage.
+ALTER TABLE "broadcasts" DROP COLUMN IF EXISTS "video_url";
+ALTER TABLE "broadcast_templates" DROP COLUMN IF EXISTS "video_url";
+DROP TABLE IF EXISTS "video_iframes";
 `;

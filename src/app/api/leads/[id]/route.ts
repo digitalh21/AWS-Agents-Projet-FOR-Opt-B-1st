@@ -16,9 +16,9 @@ export async function GET(_request: Request, { params }: Params) {
     const policy = await getFieldPolicy();
     const id = Number((await params).id);
     const [row] = await db
-      .select({ lead: leads, nicheName: niches.name, agentName: users.name, agentPhone: users.phone })
+      .select({ lead: leads, nicheName: sql<string>`coalesce(${niches.name}, 'Uncategorised')`, agentName: users.name, agentPhone: users.phone })
       .from(leads)
-      .innerJoin(niches, eq(niches.id, leads.nicheId))
+      .leftJoin(niches, eq(niches.id, leads.nicheId))
       .leftJoin(users, eq(users.id, leads.assignedAgentId))
       .where(eq(leads.id, id))
       .limit(1);

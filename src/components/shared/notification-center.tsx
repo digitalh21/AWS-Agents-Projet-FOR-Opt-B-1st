@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/field";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { cn, dateTime, timeAgo } from "@/lib/utils";
+import { SecureLink } from "@/components/shared/secure-link";
 
 type Notice = {
   id: number;
@@ -204,7 +205,7 @@ export function NotificationCenter({ isStaff, onChanged }: { isStaff: boolean; o
                   <ClipboardList className="h-3 w-3" /> Task reminders
                 </p>
                 {tasks.map((t) => (
-                  <a
+                  <SecureLink
                     key={t.href + t.label}
                     href={t.href}
                     className="flex items-center gap-2 rounded-xl border p-2.5 transition hover:bg-slate-50"
@@ -222,7 +223,7 @@ export function NotificationCenter({ isStaff, onChanged }: { isStaff: boolean; o
                     </span>
                     <span className="min-w-0 flex-1 truncate text-xs font-medium">{t.label}</span>
                     <span className="shrink-0 text-[11px] text-blue-600">Open →</span>
-                  </a>
+                  </SecureLink>
                 ))}
               </div>
             ) : null}

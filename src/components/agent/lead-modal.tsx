@@ -33,8 +33,10 @@ import { NumberInput } from "@/components/ui/number-input";
 import { AGENT_FILTERS } from "@/lib/rbac";
 import { cn, dateTime, hms, inr, renderTemplate, timeAgo, waLink } from "@/lib/utils";
 import { uploadFile } from "@/components/shared/upload-file";
+import { useInteraction } from "@/components/shared/security-guard";
 import { FieldGrid, toPolicyFields } from "@/components/lead-fields";
 import { LEAD_FIELDS } from "@/lib/fields";
+import { SecureLink } from "@/components/shared/secure-link";
 
 export type LeadDetail = {
   lead: Record<string, unknown> & {
@@ -81,6 +83,9 @@ export function LeadModal({
   onChanged: () => void;
 }) {
   const [detail, setDetail] = useState<LeadDetail | null>(null);
+  // lead-open telemetry: timestamp + duration + the action that opened it
+  const { trackLeadOpen, trackLeadClose, trackAction, state: interactionState } = useInteraction();
+  const openedAtRef = useRef<number>(Date.now());
   const [templateId, setTemplateId] = useState<number>(0);
   const [status, setStatus] = useState("IN_PROGRESS");
   const [notes, setNotes] = useState("");
@@ -144,6 +149,16 @@ export function LeadModal({
 
   }, [leadId, onClose]);
 
+  /* record the lead open (server timestamped) + start the duration clock */
+  useEffect(() => {
+    openedAtRef.current = Date.now();
+    void trackLeadOpen(leadId, "OPEN");
+    return () => {
+      // closing the modal (or navigating away) stores how long it was open
+      trackLeadClose(leadId, openedAtRef.current);
+    };
+  }, [leadId, trackLeadOpen, trackLeadClose]);
+
   useEffect(() => {
     void load();
   }, [load]);
@@ -206,6 +221,8 @@ export function LeadModal({
       setCallActive(true);
       setDuration(0);
       toast.success("Dialer opened — call duration is being tracked");
+      // the CALL action is a tracked lead-open (timestamp + action recorded)
+      void trackLeadOpen(leadId, "CALL");
       window.location.href = `tel:${detail?.lead.phone ?? ""}`;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not start call");
@@ -532,6 +549,8 @@ export function LeadModal({
                     disabled={locked}
                     onClick={async () => {
                       whatsappSentRef.current = true;
+                      void trackLeadOpen(leadId, "WHATSAPP");
+                      trackAction(`whatsapp-template:${templateId}`);
                       await post({ action: "whatsapp-sent", templateId, templateTitle: detail.templates.find((t) => t.id === templateId)?.title });
                       window.open(waLink(dialNumber ?? "", message), "_blank");
                     }}
@@ -1222,14 +1241,12 @@ function LinkRow({ label, value, masked }: { label: string; value: string | null
   return (
     <p className="flex items-center gap-1 text-[11px]">
       <span className="w-24 shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">{label}</span>
-      <a
+      <SecureLink
         href={value.startsWith("http") ? value : `https://${value}`}
-        target="_blank"
-        rel="noreferrer"
         className="truncate text-blue-600 underline decoration-dotted"
       >
         {value.replace(/^https?:\/\//, "")}
-      </a>
+      </SecureLink>
     </p>
   );
 }

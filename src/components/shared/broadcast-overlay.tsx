@@ -5,7 +5,6 @@ import { CheckCircle2, Loader2, Lock, Megaphone, MessageSquareText, Send, Volume
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge, Input } from "@/components/ui/field";
-import { isDirectVideoFile, toEmbedUrl } from "@/lib/video";
 import { cn, dateTime, timeAgo } from "@/lib/utils";
 
 type BroadcastType = "strict_lock" | "management_lock" | "dismissible_popup" | "site_banner";
@@ -15,7 +14,6 @@ type Broadcast = {
   title: string;
   body: string;
   imageUrl: string | null;
-  videoUrl: string | null;
   audioUrl: string | null;
   kind: string;
   broadcastType: BroadcastType;
@@ -38,15 +36,13 @@ type Comment = {
 const RESPONSES = ["ACKNOWLEDGED", "UNDERSTOOD", "NOTED"];
 const LOCK_TYPES: BroadcastType[] = ["strict_lock", "management_lock"];
 
-/** Text + Image + Video (auto-embedded iframe) + Audio display formats. */
+/** Text + Image + Audio display formats. */
 function MediaBlock({
   imageUrl,
-  videoUrl,
   audioUrl,
   compact = false,
 }: {
   imageUrl?: string | null;
-  videoUrl?: string | null;
   audioUrl?: string | null;
   compact?: boolean;
 }) {
@@ -59,22 +55,6 @@ function MediaBlock({
           alt=""
           className={compact ? "h-12 w-16 shrink-0 rounded object-cover" : "w-full rounded-xl border object-cover"}
         />
-      ) : null}
-      {videoUrl ? (
-        isDirectVideoFile(videoUrl) ? (
-          // eslint-disable-next-line jsx-a11y/media-has-caption
-          <video controls className={compact ? "aspect-video w-40 rounded-lg border" : "aspect-video w-full rounded-xl border bg-black"}>
-            <source src={videoUrl} />
-          </video>
-        ) : (
-          <iframe
-            src={toEmbedUrl(videoUrl) ?? videoUrl}
-            title="Broadcast video"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            className={compact ? "aspect-video w-40 rounded-lg border" : "aspect-video w-full rounded-xl border bg-black"}
-          />
-        )
       ) : null}
       {audioUrl ? (
         <div className={cn("flex items-center gap-2 rounded-lg border bg-slate-50 p-2", compact ? "w-full max-w-xs" : "")}>
@@ -253,7 +233,7 @@ export function BroadcastOverlay({ onChanged }: { onChanged?: () => void }) {
           <div className="space-y-3 p-4">
             <h2 className="text-lg font-bold leading-snug">{b.title}</h2>
             <p className="whitespace-pre-wrap text-sm text-slate-700">{b.body}</p>
-            <MediaBlock imageUrl={b.imageUrl} videoUrl={b.videoUrl} audioUrl={b.audioUrl} />
+            <MediaBlock imageUrl={b.imageUrl} audioUrl={b.audioUrl} />
             <p className="text-[10px] text-muted-foreground">
               Sent by {b.createdByName ?? "Management"} · {dateTime(b.createdAt)}
             </p>
@@ -299,9 +279,7 @@ export function BroadcastOverlay({ onChanged }: { onChanged?: () => void }) {
                   {b.createdByName ?? "Management"} · {timeAgo(b.createdAt)} · tap for details
                 </p>
               </div>
-              {b.videoUrl ? (
-                <MediaBlock videoUrl={b.videoUrl} compact />
-              ) : b.imageUrl ? (
+              {b.imageUrl ? (
                 <MediaBlock imageUrl={b.imageUrl} compact />
               ) : null}
             </button>

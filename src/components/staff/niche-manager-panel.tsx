@@ -1,12 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, Eye, EyeOff, Loader2, Plus, RefreshCcw, Save, Tags } from "lucide-react";
+import { Check, ChevronDown, Eye, EyeOff, Grid, Loader2, Plus, RefreshCcw, Save, Tags, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge, Input, Label, SectionCard, Stat, Textarea } from "@/components/ui/field";
 import { Sheet } from "@/components/ui/dialog";
 import { cn, num } from "@/lib/utils";
+import { DeleteNicheDialog, type DeletableNiche } from "@/components/staff/delete-niche-dialog";
+import { useNichesOpen } from "@/lib/use-niches-open";
 
 type Niche = {
   id: number;
@@ -25,7 +28,13 @@ type Niche = {
 const PALETTE = ["#2563eb", "#0ea5e9", "#8b5cf6", "#f59e0b", "#ec4899", "#10b981", "#ef4444", "#14b8a6"];
 
 export function NicheManagerPanel() {
+  const router = useRouter();
   const [rows, setRows] = useState<Niche[]>([]);
+  const [allTotal, setAllTotal] = useState(0);
+  const [uncategorised, setUncategorised] = useState(0);
+  const [canDelete, setCanDelete] = useState(false);
+  const [deleting, setDeleting] = useState<DeletableNiche | null>(null);
+  const { open: nichesOpen, toggle: toggleNiches } = useNichesOpen();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -35,8 +44,11 @@ export function NicheManagerPanel() {
     setLoading(true);
     const res = await fetch("/api/niches");
     if (res.ok) {
-      const json = (await res.json()) as { rows: Niche[] };
+      const json = (await res.json()) as { rows: Niche[]; allTotal?: number; uncategorised?: number; canDelete?: boolean };
       setRows(json.rows ?? []);
+      setAllTotal(json.allTotal ?? 0);
+      setUncategorised(json.uncategorised ?? 0);
+      setCanDelete(Boolean(json.canDelete));
     }
     setLoading(false);
   }, []);
@@ -55,6 +67,7 @@ export function NicheManagerPanel() {
     const json = (await res.json()) as { error?: string };
     if (res.ok) {
       toast.success(`Niche “${form.name}” created — now live in the sidebar and dropdowns`);
+      router.refresh();
       setAddOpen(false);
       setForm({ name: "", description: "", color: PALETTE[0], visibleToAgents: true });
       await load();
@@ -70,11 +83,12 @@ export function NicheManagerPanel() {
     });
     if (res.ok) {
       toast.success("Niche updated");
+      router.refresh();
       await load();
     } else toast.error("Update failed");
   }
 
-  const totalLeads = rows.reduce((s, r) => s + r.total, 0);
+  const totalLeads = allTotal || rows.reduce((s, r) => s + r.total, 0);
 
   return (
     <div className="space-y-3 p-3 sm:p-4 lg:p-6">
@@ -99,7 +113,36 @@ export function NicheManagerPanel() {
           </div>
         }
       >
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {/* master toggle — hides / shows the niche cards. Display only: it never changes which leads exist or load. */}
+        <div className="mb-3 flex items-center gap-3 rounded-xl border bg-slate-50 p-3">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700">
+            <Grid className="h-4 w-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold">All niches</p>
+            <p className="text-[11px] text-muted-foreground">
+              {num(totalLeads)} lead(s) in total
+              {uncategorised ? ` · ${num(uncategorised)} uncategorised` : ""} — always visible under “All niches”, even when a niche
+              is hidden.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={nichesOpen}
+            aria-label={nichesOpen ? "Hide niche list" : "Show niche list"}
+            onClick={toggleNiches}
+            className={cn(
+              "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-bold transition",
+              nichesOpen ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-300 bg-white text-slate-500",
+            )}
+          >
+            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", !nichesOpen && "-rotate-90")} />
+            {nichesOpen ? "Niches shown" : "Niches hidden"}
+          </button>
+        </div>
+
+        <div className={cn("grid gap-2 sm:grid-cols-2 lg:grid-cols-3", !nichesOpen && "hidden")}>
           {rows.map((n) => (
             <div key={n.id} className="rounded-xl border p-3">
               <div className="flex items-start gap-2">
@@ -167,6 +210,16 @@ export function NicheManagerPanel() {
                   <p className="font-bold tabular-nums text-emerald-700">{num(n.closed)}</p>
                 </div>
               </div>
+              {canDelete ? (
+                <button
+                  type="button"
+                  onClick={() => setDeleting({ id: n.id, name: n.name, total: n.total })}
+                  className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1.5 text-[11px] font-bold text-rose-700 transition hover:bg-rose-100"
+                  aria-label={`Delete niche ${n.name}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Delete niche
+                </button>
+              ) : null}
               <div className="mt-2 flex flex-wrap gap-1">
                 {PALETTE.map((c) => (
                   <button
@@ -186,6 +239,15 @@ export function NicheManagerPanel() {
         </div>
         {rows.length === 0 && !loading ? <p className="text-xs text-muted-foreground">No niches yet — add your first category.</p> : null}
       </SectionCard>
+
+      <DeleteNicheDialog
+        niche={deleting}
+        onClose={() => setDeleting(null)}
+        onDeleted={() => {
+          void load();
+          router.refresh();
+        }}
+      />
 
       <Sheet
         open={addOpen}

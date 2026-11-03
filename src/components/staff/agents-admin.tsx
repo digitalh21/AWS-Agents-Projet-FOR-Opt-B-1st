@@ -30,6 +30,7 @@ type Row = {
   walletPending: string;
   walletApproved: string;
   commissionPerDeal: string;
+  dailyClickQuota: number | null;
   upiId: string | null;
   bankName: string | null;
   leadCount: number;
@@ -227,6 +228,21 @@ export function AgentsAdmin() {
                         Switch as User
                       </Button>
                     ) : null}
+                    <label className="flex items-center gap-1 text-[10px] font-semibold text-slate-600">
+                      Click quota
+                      <input
+                        type="number"
+                        min={0}
+                        placeholder="∞"
+                        defaultValue={r.dailyClickQuota ?? ""}
+                        onBlur={(e) => {
+                          const raw = e.target.value;
+                          const next = raw === "" ? null : Math.max(0, Math.floor(Number(raw)));
+                          if (next !== (r.dailyClickQuota ?? null)) void patch(r.id, { dailyClickQuota: next });
+                        }}
+                        className="h-7 w-14 rounded-md border px-1.5 text-[11px] tabular-nums"
+                      />
+                    </label>
                     <Button size="xs" variant="outline" disabled={busy} onClick={() => void patch(r.id, { walletAdjust: 500 })}>
                       +₹500
                     </Button>
@@ -307,6 +323,21 @@ export function AgentsAdmin() {
                   Switch as User
                 </Button>
               ) : null}
+              <label className="flex items-center gap-1 text-[10px] font-semibold text-slate-600">
+                Click quota
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="∞"
+                  defaultValue={r.dailyClickQuota ?? ""}
+                  onBlur={(e) => {
+                    const raw = e.target.value;
+                    const next = raw === "" ? null : Math.max(0, Math.floor(Number(raw)));
+                    if (next !== (r.dailyClickQuota ?? null)) void patch(r.id, { dailyClickQuota: next });
+                  }}
+                  className="h-7 w-16 rounded-md border px-1.5 text-[11px] tabular-nums"
+                />
+              </label>
               <Button size="xs" variant="outline" disabled={busy} onClick={() => void patch(r.id, { walletAdjust: 500 })}>
                 +₹500
               </Button>

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { SecureLink as Link } from "@/components/shared/secure-link";
 import { ArrowLeft } from "lucide-react";
 import { AgentProfileView } from "@/components/agent/agent-profile-view";
 import { requireStaffPage } from "@/lib/auth";

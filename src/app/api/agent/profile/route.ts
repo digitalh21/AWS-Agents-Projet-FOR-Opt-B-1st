@@ -5,6 +5,7 @@ import { audit, fail, handleError, ok } from "@/lib/api";
 import { asUserId, requireUser, isStaff } from "@/lib/auth";
 import { activityHistory, activityToday, activityTotals } from "@/lib/activity";
 import { resolveAgentCommission, getDailyQuota } from "@/lib/commission";
+import { getQuota, recentLeadOpens } from "@/lib/activity-tracking";
 
 export const dynamic = "force-dynamic";
 
@@ -96,6 +97,17 @@ export async function GET(request: Request) {
     ]);
     payload.dailyActivity = history;
     payload.dailyLeadQuota = await getDailyQuota(targetId);
+
+    /* ---- click quota + today's interaction counters (staff visibility) ---- */
+    payload.quota = await getQuota(targetId);
+    payload.recentLeadOpens = (await recentLeadOpens(targetId, 15)).map((o) => ({
+      id: o.id,
+      leadId: o.leadId,
+      action: o.action,
+      openedAt: o.openedAt,
+      durationMs: o.durationMs,
+      path: o.path,
+    }));
     payload.activityToday = today;
     payload.activityTotals = totals;
 

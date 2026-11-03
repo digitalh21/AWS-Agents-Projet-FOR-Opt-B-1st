@@ -28,7 +28,6 @@ type Broadcast = {
   title: string;
   body: string;
   imageUrl: string | null;
-  videoUrl: string | null;
   audioUrl: string | null;
   kind: string;
   broadcastType: "strict_lock" | "management_lock" | "dismissible_popup" | "site_banner" | string;
@@ -59,7 +58,6 @@ type Template = {
   title: string;
   body: string;
   imageUrl: string | null;
-  videoUrl: string | null;
   audioUrl: string | null;
   kind: string;
   createdAt: string;
@@ -75,15 +73,14 @@ type Comment = {
 };
 
 /** Which display formats a broadcast/template carries. */
-function formatsOf(m: { imageUrl: string | null; videoUrl: string | null; audioUrl: string | null }): string[] {
+function formatsOf(m: { imageUrl: string | null; audioUrl: string | null }): string[] {
   const out = ["TEXT"];
   if (m.imageUrl) out.push("IMAGE");
-  if (m.videoUrl) out.push("VIDEO");
   if (m.audioUrl) out.push("AUDIO");
   return out;
 }
 
-function FormatChips({ item }: { item: { imageUrl: string | null; videoUrl: string | null; audioUrl: string | null } }) {
+function FormatChips({ item }: { item: { imageUrl: string | null; audioUrl: string | null } }) {
   return (
     <span className="inline-flex gap-1">
       {formatsOf(item).map((f) => (
@@ -121,14 +118,13 @@ export function BroadcastsPanel() {
     targetUserId: "",
     requireAcknowledgment: true,
     expiresInHours: "",
-    videoUrl: "",
     audioUrl: "",
   };
   const [form, setForm] = useState(emptyForm);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
-  const emptyTpl = { title: "", body: "", kind: "POPUP", imageUrl: "", videoUrl: "", audioUrl: "" };
+  const emptyTpl = { title: "", body: "", kind: "POPUP", imageUrl: "", audioUrl: "" };
   const [tplForm, setTplForm] = useState(emptyTpl);
 
   const load = useCallback(async () => {
@@ -192,7 +188,6 @@ export function BroadcastsPanel() {
       targetUserId: b.targetUserId ?? "",
       requireAcknowledgment: b.requireAcknowledgment,
       expiresInHours: "",
-      videoUrl: b.videoUrl ?? "",
       audioUrl: b.audioUrl ?? "",
     });
     setImageUrl(b.imageUrl);
@@ -207,7 +202,6 @@ export function BroadcastsPanel() {
       broadcastType: form.broadcastType,
       requireAcknowledgment: form.broadcastType === "strict_lock" || form.broadcastType === "management_lock",
       imageUrl,
-      videoUrl: form.videoUrl || undefined,
       audioUrl: form.audioUrl || undefined,
     };
     const res = editId
@@ -274,7 +268,6 @@ export function BroadcastsPanel() {
       body: t.body,
       kind: t.kind,
       imageUrl: t.imageUrl ?? "",
-      videoUrl: t.videoUrl ?? "",
       audioUrl: t.audioUrl ?? "",
     });
     setTplOpen(true);
@@ -320,7 +313,6 @@ export function BroadcastsPanel() {
       title: t.title,
       body: t.body,
       broadcastType: t.kind === "BANNER" ? "site_banner" : "dismissible_popup",
-      videoUrl: t.videoUrl ?? "",
       audioUrl: t.audioUrl ?? "",
     });
     setImageUrl(t.imageUrl);
@@ -377,7 +369,7 @@ export function BroadcastsPanel() {
           }
         >
           {rows.length === 0 && !loading ? (
-            <EmptyState title="No broadcasts yet" hint="Send text, image, video or audio alerts to all agents or a single agent." icon="📢" />
+            <EmptyState title="No broadcasts yet" hint="Send text, image or audio alerts to all agents or a single agent." icon="📢" />
           ) : null}
 
           <div className="space-y-2">
@@ -568,7 +560,7 @@ export function BroadcastsPanel() {
           <div className="rounded-xl border bg-slate-50 p-2.5">
             <p className="flex items-center justify-between text-[11px] font-bold text-slate-600">
               Display formats
-              <FormatChips item={{ imageUrl, videoUrl: form.videoUrl || null, audioUrl: form.audioUrl || null }} />
+              <FormatChips item={{ imageUrl, audioUrl: form.audioUrl || null }} />
             </p>
             <div className="mt-2 space-y-2">
               <div className="space-y-1">
@@ -590,14 +582,6 @@ export function BroadcastsPanel() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={imageUrl} alt="" className="h-24 w-full rounded-lg border object-cover" />
                 ) : null}
-              </div>
-              <div className="space-y-1">
-                <Label>Video URL (optional — auto-embeds in the popup)</Label>
-                <Input
-                  value={form.videoUrl}
-                  onChange={(e) => setForm({ ...form, videoUrl: e.target.value })}
-                  placeholder="https://youtube.com/watch?v=… or https://…/clip.mp4"
-                />
               </div>
               <div className="space-y-1">
                 <Label>Audio URL (optional)</Label>
@@ -665,10 +649,6 @@ export function BroadcastsPanel() {
           <div className="space-y-1">
             <Label>Image URL (optional)</Label>
             <Input value={tplForm.imageUrl} onChange={(e) => setTplForm({ ...tplForm, imageUrl: e.target.value })} placeholder="https://…" />
-          </div>
-          <div className="space-y-1">
-            <Label>Video URL (optional)</Label>
-            <Input value={tplForm.videoUrl} onChange={(e) => setTplForm({ ...tplForm, videoUrl: e.target.value })} placeholder="https://…" />
           </div>
           <div className="space-y-1">
             <Label>Audio URL (optional)</Label>

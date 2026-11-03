@@ -110,11 +110,11 @@ export async function GET(request: Request) {
             agentRole: users.role,
             agentOnline: users.isOnline,
             agentSeen: users.lastSeenAt,
-            nicheName: niches.name,
+            nicheName: sql<string>`coalesce(${niches.name}, 'Uncategorised')`,
           })
           .from(leads)
           .leftJoin(users, eq(users.id, leads.assignedAgentId))
-          .innerJoin(niches, eq(niches.id, leads.nicheId))
+          .leftJoin(niches, eq(niches.id, leads.nicheId))
           .where(where)
           .orderBy(sql`coalesce(${leads.lastTouchedAt}, ${leads.updatedAt}) desc`)
           .limit(perColumn);

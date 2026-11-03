@@ -8,6 +8,7 @@ import { Badge, EmptyState, Input, Label, NativeSelect, SectionCard, Stat, Texta
 import { Sheet } from "@/components/ui/dialog";
 import { OpenLeadButton } from "@/components/shared/lead-peek";
 import { cn, dateTime, timeAgo } from "@/lib/utils";
+import { SecureLink } from "@/components/shared/secure-link";
 
 type Report = {
   id: number;
@@ -141,9 +142,9 @@ export function LeadErrorsPanel() {
                   </p>
                   <p className="mt-1 rounded-lg bg-slate-50 p-2 text-xs">{r.details}</p>
                   {r.proofUrl ? (
-                    <a href={r.proofUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[11px] text-blue-600 underline">
+                    <SecureLink href={r.proofUrl} className="mt-1 inline-block text-[11px] text-blue-600 underline">
                       View attached proof
-                    </a>
+                    </SecureLink>
                   ) : null}
                   {r.resolution ? (
                     <p className="mt-1.5 rounded-lg bg-emerald-50 p-2 text-[11px] text-emerald-800">

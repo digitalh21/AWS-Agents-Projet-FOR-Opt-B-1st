@@ -41,7 +41,6 @@ export async function GET(request: Request) {
           title: broadcasts.title,
           body: broadcasts.body,
           imageUrl: broadcasts.imageUrl,
-          videoUrl: broadcasts.videoUrl,
           audioUrl: broadcasts.audioUrl,
           kind: broadcasts.kind,
           broadcastType: broadcasts.broadcastType,
@@ -86,7 +85,6 @@ export async function GET(request: Request) {
         title: broadcasts.title,
         body: broadcasts.body,
         imageUrl: broadcasts.imageUrl,
-        videoUrl: broadcasts.videoUrl,
         audioUrl: broadcasts.audioUrl,
         kind: broadcasts.kind,
         broadcastType: broadcasts.broadcastType,
@@ -136,7 +134,6 @@ export async function POST(request: Request) {
       title?: string;
       body?: string;
       imageUrl?: string;
-      videoUrl?: string;
       audioUrl?: string;
       kind?: string;
       broadcastType?: string;
@@ -167,7 +164,6 @@ export async function POST(request: Request) {
         title,
         body: text,
         imageUrl: cleanMediaUrl(body.imageUrl),
-        videoUrl: cleanMediaUrl(body.videoUrl),
         audioUrl: cleanMediaUrl(body.audioUrl),
         kind,
         broadcastType,
@@ -211,7 +207,6 @@ export async function PATCH(request: Request) {
       title?: string;
       body?: string;
       imageUrl?: string | null;
-      videoUrl?: string | null;
       audioUrl?: string | null;
       kind?: string;
       broadcastType?: string;
@@ -225,7 +220,6 @@ export async function PATCH(request: Request) {
     if (typeof body.title === "string" && body.title.trim().length >= 3) patch.title = body.title.trim();
     if (typeof body.body === "string" && body.body.trim().length >= 3) patch.body = body.body.trim();
     if (body.imageUrl !== undefined) patch.imageUrl = cleanMediaUrl(body.imageUrl);
-    if (body.videoUrl !== undefined) patch.videoUrl = cleanMediaUrl(body.videoUrl);
     if (body.audioUrl !== undefined) patch.audioUrl = cleanMediaUrl(body.audioUrl);
     if (body.kind === "BANNER" || body.kind === "POPUP") patch.kind = body.kind;
     const nextType = asBroadcastType(body.broadcastType);

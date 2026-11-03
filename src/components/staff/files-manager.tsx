@@ -7,7 +7,6 @@ import {
   File as FileIcon,
   FileAudio,
   FileText,
-  FileVideo,
   Filter,
   Image as ImageIcon,
   Loader2,
@@ -22,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Badge, EmptyState, Label, NativeSelect, SectionCard } from "@/components/ui/field";
 import { SafeImage } from "@/components/shared/safe-image";
 import { cn, num, timeAgo } from "@/lib/utils";
+import { SecureLink } from "@/components/shared/secure-link";
 
 type FileRow = {
   id: number;
@@ -44,7 +44,6 @@ type Tab = { key: string; label: string; icon: typeof ImageIcon };
 const TABS: Tab[] = [
   { key: "images", label: "Images", icon: ImageIcon },
   { key: "pdfs", label: "PDFs", icon: FileText },
-  { key: "videos", label: "Videos", icon: FileVideo },
   { key: "others", label: "Others", icon: FileIcon },
   { key: "manual", label: "Manual Uploads", icon: UploadCloud },
 ];
@@ -61,7 +60,6 @@ function sizeLabel(bytes: number | null) {
 function fileIcon(mime: string | null) {
   if (mime?.startsWith("image/")) return ImageIcon;
   if (mime === "application/pdf") return FileText;
-  if (mime?.startsWith("video/")) return FileVideo;
   if (mime?.startsWith("audio/")) return FileAudio;
   return FileIcon;
 }
@@ -220,9 +218,7 @@ export function FilesManager() {
               <div key={f.id} className="flex gap-2.5 rounded-xl border bg-white p-2.5 shadow-sm">
                 {f.mimeType?.startsWith("image/") ? (
                   <SafeImage src={proxy} alt={f.fileName ?? "file"} className="h-16 w-16 shrink-0 rounded-lg object-cover" />
-                ) : f.mimeType?.startsWith("video/") ? (
-                  <video src={`${proxy}#t=0.1`} muted preload="metadata" className="h-16 w-16 shrink-0 rounded-lg bg-black object-cover" />
-                ) : (
+                )  : (
                   <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-400">
                     <Icon className="h-6 w-6" />
                   </span>
@@ -252,14 +248,12 @@ export function FilesManager() {
                     >
                       <Eye className="h-3 w-3" /> Preview
                     </button>
-                    <a
+                    <SecureLink
                       href={proxy}
-                      target="_blank"
-                      rel="noreferrer"
                       className="rounded-lg border px-2 py-1 text-[10px] font-bold text-blue-700 hover:bg-blue-50"
                     >
                       Open
-                    </a>
+                    </SecureLink>
                     <a
                       href={`${proxy}?dl=1`}
                       className="rounded-lg border px-2 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-50"
@@ -323,14 +317,6 @@ export function FilesManager() {
                 }
                 if (preview.mimeType === "application/pdf") {
                   return <iframe src={src} title="PDF preview" className="h-[75dvh] w-full rounded-lg border bg-white" />;
-                }
-                if (preview.mimeType?.startsWith("video/")) {
-                  return (
-                    // eslint-disable-next-line jsx-a11y/media-has-caption
-                    <video controls className="max-h-[75dvh] w-full rounded-lg bg-black">
-                      <source src={src} type={preview.mimeType ?? "video/mp4"} />
-                    </video>
-                  );
                 }
                 if (preview.mimeType?.startsWith("audio/")) {
                   return (

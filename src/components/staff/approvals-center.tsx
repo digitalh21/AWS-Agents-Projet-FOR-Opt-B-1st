@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet } from "@/components/ui/dialog";
 import { OpenLeadButton } from "@/components/shared/lead-peek";
 import { cn, dateTime, inr, num, timeAgo, waLink } from "@/lib/utils";
+import { SecureLink } from "@/components/shared/secure-link";
 
 type Deal = {
   id: number;
@@ -253,9 +254,9 @@ export function ApprovalsCenter() {
                     <OpenLeadButton leadId={d.leadId} leadCode={`#${d.leadId}`} isStaff={true} />
                     <Badge variant={d.status === "APPROVED" ? "success" : d.status === "PENDING" ? "warn" : "danger"}>{d.status}</Badge>
                     {d.agentPhone ? (
-                      <a href={waLink(d.agentPhone, `Deal verification for ${d.businessName} (#${d.leadId})`)} target="_blank" rel="noreferrer" className="text-xs text-emerald-600 underline">
+                      <SecureLink href={waLink(d.agentPhone, `Deal verification for ${d.businessName} (#${d.leadId})`)} className="text-xs text-emerald-600 underline">
                         WhatsApp agent
-                      </a>
+                      </SecureLink>
                     ) : null}
                   </div>
                 </div>

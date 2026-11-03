@@ -8,9 +8,9 @@ import { ensureTables } from "@/db/bootstrap";
 
 export const dynamic = "force-dynamic";
 
-type FileTab = "images" | "pdfs" | "videos" | "others" | "manual";
+type FileTab = "images" | "pdfs" | "others" | "manual";
 
-const TABS: FileTab[] = ["images", "pdfs", "videos", "others", "manual"];
+const TABS: FileTab[] = ["images", "pdfs", "others", "manual"];
 
 function typeWhere(tab: FileTab) {
   switch (tab) {
@@ -18,10 +18,8 @@ function typeWhere(tab: FileTab) {
       return sql`${uploads.mimeType} ilike 'image/%' and upper(coalesce(${uploads.kind}, '')) <> 'MANUAL'`;
     case "pdfs":
       return sql`${uploads.mimeType} = 'application/pdf' and upper(coalesce(${uploads.kind}, '')) <> 'MANUAL'`;
-    case "videos":
-      return sql`${uploads.mimeType} ilike 'video/%' and upper(coalesce(${uploads.kind}, '')) <> 'MANUAL'`;
     case "others":
-      return sql`${uploads.mimeType} not ilike 'image/%' and ${uploads.mimeType} <> 'application/pdf' and ${uploads.mimeType} not ilike 'video/%' and upper(coalesce(${uploads.kind}, '')) <> 'MANUAL'`;
+      return sql`${uploads.mimeType} not ilike 'image/%' and ${uploads.mimeType} <> 'application/pdf' and upper(coalesce(${uploads.kind}, '')) <> 'MANUAL'`;
     case "manual":
       return sql`upper(coalesce(${uploads.kind}, '')) = 'MANUAL'`;
   }
@@ -30,7 +28,7 @@ function typeWhere(tab: FileTab) {
 /**
  * Central File Storage Manager (management only).
  *
- * GET ?type=images|pdfs|videos|others|manual&userId=<uuid>
+ * GET ?type=images|pdfs|others|manual&userId=<uuid>
  * Rows carry the Backblaze B2 metadata (storage driver + object key) synced
  * from B2 at upload time; uploader names resolve from the users table.
  */

@@ -27,7 +27,7 @@ async function loadLead(id: number) {
   const [row] = await db
     .select({ lead: leads, nicheName: niches.name, nicheSlug: niches.slug })
     .from(leads)
-    .innerJoin(niches, eq(niches.id, leads.nicheId))
+    .leftJoin(niches, eq(niches.id, leads.nicheId))
     .where(eq(leads.id, id))
     .limit(1);
   return row;

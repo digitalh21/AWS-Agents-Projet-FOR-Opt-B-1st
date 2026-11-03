@@ -66,12 +66,24 @@ export function sanitizeDatabaseUrl(raw: string | undefined | null): string {
   const user = colon === -1 ? userinfo : userinfo.slice(0, colon);
   const pass = colon === -1 ? "" : userinfo.slice(colon + 1);
 
-  const encUser = user ? normalizeSecretComponent(user) : user;
+  let encUser = user ? normalizeSecretComponent(user) : user;
   const encPass = pass ? normalizeSecretComponent(pass) : pass;
 
   const hostOnly = hostport.split(":")[0] ?? hostport;
   if (POOLER_HOST_FIXES[hostOnly]) {
     hostport = hostport.replace(hostOnly, POOLER_HOST_FIXES[hostOnly]!);
+  }
+
+  // Supabase direct hosts (db.<ref>.supabase.co) resolve to IPv6 only, which
+  // most hosting/sandbox networks cannot reach (ENETUNREACH). Route them via
+  // the IPv4 session pooler (port 5432) with the "<user>.<ref>" username.
+  const direct = /^db\.([a-z0-9]+)\.supabase\.co$/i.exec(hostOnly);
+  if (direct) {
+    const ref = direct[1]!.toLowerCase();
+    const region = (process.env.SUPABASE_POOLER_REGION || "ap-southeast-1").trim();
+    const prefix = (process.env.SUPABASE_POOLER_PREFIX || "aws-0").trim();
+    hostport = `${prefix}-${region}.pooler.supabase.com:5432`;
+    if (!encUser.includes(".")) encUser = `${encUser || "postgres"}.${ref}`;
   }
 
   const creds = encPass ? `${encUser}:${encPass}` : encUser;

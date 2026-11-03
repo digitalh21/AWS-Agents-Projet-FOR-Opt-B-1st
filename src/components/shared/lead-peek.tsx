@@ -136,7 +136,7 @@ export function OpenLeadButton({
   leadId,
   leadCode,
   isStaff,
-  label = "Open Lead",
+  label = "View Lead",
   size = "xs",
 }: {
   leadId: number;

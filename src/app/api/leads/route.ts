@@ -66,7 +66,7 @@ export async function GET(request: Request) {
       competitorName: leads.competitorName,
       competitorReviews: leads.competitorReviews,
       nicheId: leads.nicheId,
-      nicheName: niches.name,
+      nicheName: sql<string>`coalesce(${niches.name}, 'Uncategorised')`,
       assignedAgentId: leads.assignedAgentId,
       agentName: users.name,
       accessUnlocked: leads.accessUnlocked,
@@ -83,7 +83,7 @@ export async function GET(request: Request) {
       db
         .select(baseSelect)
         .from(leads)
-        .innerJoin(niches, eq(niches.id, leads.nicheId))
+        .leftJoin(niches, eq(niches.id, leads.nicheId))
         .leftJoin(users, eq(users.id, leads.assignedAgentId))
         .where(where)
         .orderBy(...orderBy)
@@ -116,7 +116,7 @@ export async function GET(request: Request) {
         name: users.name,
         role: users.role,
         isOnline: users.isOnline,
-        activeLeadCount: sql<number>`(select count(*) from ${leads} where ${leads.assignedAgentId} = ${users.id})::int`,
+        activeLeadCount: sql<number>`(select count(*) from pipeline_leads pl where pl.assigned_agent_id = "users"."id")::int`,
       })
       .from(users)
       .where(inArray(users.role, ["AGENT", "MANAGER", "HR", "ADMIN"]))

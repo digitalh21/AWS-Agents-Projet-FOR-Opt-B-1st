@@ -1,7 +1,7 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { users } from "@/db/schema";
 import { db } from "@/db";
-import { leads, niches } from "@/db/schema";
+import { leadRequests, leads, niches, templates } from "@/db/schema";
 import { audit, fail, handleError, ok } from "@/lib/api";
 import { requireStaff } from "@/lib/auth";
 import { ensureTables } from "@/db/bootstrap";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     await ensureTables();
-    await requireStaff();
+    const viewer = await requireStaff();
     // Grouped aggregates instead of correlated subqueries (they mis-bind under Drizzle).
     const [rows, totals, assignedRows, closedRows, agentRows, visibilityRows] = await Promise.all([
       db
@@ -62,7 +62,17 @@ export async function GET() {
       };
     });
 
-    return ok({ rows: enriched, canManage: true });
+    // Every lead, including ones with no niche — what the "All niches" view shows.
+    const allTotal = totals.reduce((sum, r) => sum + Number(r.value), 0);
+    const uncategorised = Number(totals.find((r) => r.nicheId === null)?.value ?? 0);
+
+    return ok({
+      rows: enriched,
+      canManage: true,
+      canDelete: viewer.role === "ADMIN" || viewer.role === "HR",
+      allTotal,
+      uncategorised,
+    });
   } catch (error) {
     return handleError(error);
   }
@@ -142,6 +152,53 @@ export async function PATCH(request: Request) {
       meta: { nicheId: row.id },
     });
     return ok({ niche: row });
+  } catch (error) {
+    return handleError(error);
+  }
+}
+
+/**
+ * DELETE /api/niches?id=3   (ADMIN or HR)
+ *
+ * Removes a niche. Leads are NEVER deleted: they keep all their data and simply
+ * become "uncategorised" (niche_id = NULL), so they stay reachable under the
+ * "All niches" view. Agents / templates / lead requests that pointed at the
+ * niche are detached in the same transaction.
+ */
+export async function DELETE(request: Request) {
+  try {
+    await ensureTables();
+    const staff = await requireStaff();
+    if (staff.role !== "ADMIN" && staff.role !== "HR") {
+      return fail("Only ADMIN or HR can delete niches", 403);
+    }
+    const id = Number(new URL(request.url).searchParams.get("id") ?? 0);
+    if (!Number.isInteger(id) || id <= 0) return fail("id required", 422);
+
+    const [niche] = await db.select().from(niches).where(eq(niches.id, id)).limit(1);
+    if (!niche) return fail("Niche not found", 404);
+
+    const detached = await db.transaction(async (tx) => {
+      const movedLeads = await tx.update(leads).set({ nicheId: null }).where(eq(leads.nicheId, id)).returning({ id: leads.id });
+      const movedAgents = await tx
+        .update(users)
+        .set({ primaryNicheId: null })
+        .where(eq(users.primaryNicheId, id))
+        .returning({ id: users.id });
+      await tx.update(templates).set({ nicheId: null }).where(eq(templates.nicheId, id));
+      await tx.update(leadRequests).set({ nicheId: null }).where(eq(leadRequests.nicheId, id));
+      await tx.delete(niches).where(eq(niches.id, id));
+      return { leads: movedLeads.length, agents: movedAgents.length };
+    });
+
+    await audit({
+      actorId: staff.id,
+      actorRole: staff.role,
+      action: "NICHE_DELETED",
+      detail: `${niche.name} (${detached.leads} lead(s) kept as uncategorised)`,
+      meta: { nicheId: id, ...detached },
+    });
+    return ok({ deleted: true, id, name: niche.name, leadsKept: detached.leads, agentsDetached: detached.agents });
   } catch (error) {
     return handleError(error);
   }

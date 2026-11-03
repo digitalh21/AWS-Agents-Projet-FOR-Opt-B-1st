@@ -46,8 +46,8 @@ export async function GET(request: Request) {
       eq(leads.archivedForAgent, false),
       inArray(leads.status, [...AGENT_TABS]),
     ];
-    // always exclude hidden niches
-    if (hidden.length > 0) filters.push(sql`${leads.nicheId} not in (${sql.join(hidden.map((id) => sql`${id}`), sql`, `)})`);
+    // "All niches" is unconditional: a niche hidden from the sidebar never removes
+    // its leads from the master view (only an explicit hidden-niche id is locked above).
     if (nicheId > 0) filters.push(eq(leads.nicheId, nicheId));
     if (q) {
       filters.push(or(ilike(leads.businessName, `%${q}%`), ilike(leads.city, `%${q}%`), ilike(leads.phone, `%${q}%`))!);
@@ -67,8 +67,8 @@ export async function GET(request: Request) {
           cityKeyword: leads.cityKeyword,
           city: leads.city,
           nicheId: leads.nicheId,
-          nicheName: niches.name,
-          nicheColor: niches.color,
+          nicheName: sql<string>`coalesce(${niches.name}, 'Uncategorised')`,
+          nicheColor: sql<string>`coalesce(${niches.color}, '#94a3b8')`,
           status: leads.status,
           callStatus: leads.callStatus,
           serviceStatus: leads.serviceStatus,
@@ -87,7 +87,7 @@ export async function GET(request: Request) {
           commissionAmount: leads.commissionAmount,
         })
         .from(leads)
-        .innerJoin(niches, eq(niches.id, leads.nicheId))
+        .leftJoin(niches, eq(niches.id, leads.nicheId))
         .where(where)
         .orderBy(desc(sql`coalesce(${leads.lastTouchedAt}, ${leads.assignedAt})`), desc(leads.id))
         .limit(pageSize)
@@ -101,8 +101,7 @@ export async function GET(request: Request) {
             eq(leads.assignedAgentId, user.id),
             eq(leads.archivedForAgent, false),
             inArray(leads.status, [...AGENT_TABS]),
-            // tab badges must respect the sidebar niche selection + hidden niches
-            hidden.length > 0 ? sql`${leads.nicheId} not in (${sql.join(hidden.map((id) => sql`${id}`), sql`, `)})` : undefined,
+            // tab badges follow the sidebar niche selection ("All niches" = no niche filter)
             nicheId > 0 ? eq(leads.nicheId, nicheId) : undefined,
             q ? or(ilike(leads.businessName, `%${q}%`), ilike(leads.city, `%${q}%`), ilike(leads.phone, `%${q}%`)) : undefined,
           ),

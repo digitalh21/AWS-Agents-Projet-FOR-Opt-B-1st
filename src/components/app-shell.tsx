@@ -1,18 +1,24 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import Link from "next/link";
+import { SecureLink as Link } from "@/components/shared/secure-link";
+import { HeaderActivity } from "@/components/agent/header-activity";
+import { DeleteNicheDialog } from "@/components/staff/delete-niche-dialog";
+import { useNichesOpen } from "@/lib/use-niches-open";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BadgeCheck,
   Bell,
   BellRing,
+  ChevronDown,
   ChevronRight,
   Filter,
   Grid,
   IdCard,
   Kanban,
+  Table2,
   LogOut,
+  RefreshCw,
   Menu,
   Phone,
   Radio,
@@ -24,11 +30,11 @@ import {
   Award,
   Tags,
   ScrollText,
-  Clapperboard,
-  FolderOpen,
+    FolderOpen,
   Undo2,
   Settings,
   Timer,
+  Trash2,
   Users,
   Wallet,
   X,
@@ -70,25 +76,28 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   wallet: Wallet,
   "id-card": IdCard,
   kanban: Kanban,
+  table: Table2,
   "badge-check": BadgeCheck,
   users: Users,
   bell: Bell,
   scroll: ScrollText,
   timer: Timer,
   radio: Radio,
-  film: Clapperboard,
   folder: FolderOpen,
 };
 
 export function AppShell({
   user,
   niches,
+  allTotal = 0,
   navItems,
   impersonator = null,
   children,
 }: {
   user: AppUser;
   niches: NicheOption[];
+  /** every lead regardless of niche — the "All niches" count */
+  allTotal?: number;
   navItems: Array<{ href: string; label: string; icon: string; badge?: "approvals" | "errors" | "tickets" }>;
   /** set when management is previewing as this user ("Switch as User") */
   impersonator?: { name: string } | null;
@@ -105,13 +114,27 @@ export function AppShell({
     tickets: 0,
   });
   const [nicheId, setNicheState] = useState(0);
+  // "All niches" master toggle (display only) + niche deletion (ADMIN / HR)
+  const { open: nichesOpen, toggle: toggleNiches } = useNichesOpen();
+  const [deletingNiche, setDeletingNiche] = useState<NicheOption | null>(null);
+  const canDeleteNiche = user.role === "ADMIN" || user.role === "HR";
   const [seconds, setSeconds] = useState(0);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [lastSync, setLastSync] = useState<string>("");
 
   /* restore niche filter */
   useEffect(() => {
     setNicheState(Number(window.localStorage.getItem("tc_niche") ?? 0));
   }, []);
+
+  /* a saved niche that no longer exists (deleted / hidden) must never leave the
+     lead list empty — fall back to "All niches", which shows every lead */
+  useEffect(() => {
+    if (nicheId > 0 && !niches.some((n) => n.id === nicheId)) {
+      setNicheState(0);
+      window.localStorage.setItem("tc_niche", "0");
+    }
+  }, [nicheId, niches]);
 
   const leadsRoute = user.role === "AGENT" ? "/dashboard/agent" : "/dashboard/admin";
 
@@ -161,6 +184,18 @@ export function AppShell({
     };
   }, [navItems]);
 
+  /* Global auto-sync pulse: every 60s the shell refreshes live data and
+     notifies every subscribed view (pipeline board/table) to re-fetch. */
+  useEffect(() => {
+    const beat = () => {
+      setLastSync(new Date().toLocaleTimeString("en-GB", { hour12: false, fractionalSecondDigits: 3 } as Intl.DateTimeFormatOptions));
+      window.dispatchEvent(new Event("ags-autosync"));
+    };
+    beat();
+    const t = setInterval(beat, 60000);
+    return () => clearInterval(t);
+  }, []);
+
   /* notifications polling + browser push */
   useEffect(() => {
     let alive = true;
@@ -203,7 +238,7 @@ export function AppShell({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ seconds: payload, day: new Date().toISOString().slice(0, 10) }),
       }).catch(() => undefined);
-    }, 60000);
+    }, 5000);
 
     return () => {
       clearInterval(tick);
@@ -246,38 +281,87 @@ export function AppShell({
   const roleLabel = user.role === "AGENT" ? "Telecalling Agent" : user.role.charAt(0) + user.role.slice(1).toLowerCase();
   const isActive = (href: string) => pathname === href || (href !== "/agent" && pathname.startsWith(`${href}/`));
 
+  const activeNiche = niches.find((n) => n.id === nicheId) ?? null;
+
   const nichePicker = (
     <>
-      <button
-        onClick={() => setNicheId(0)}
-        className={cn(
-          "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold lg:w-full lg:justify-between lg:rounded-lg",
-          nicheId === 0 ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600",
-        )}
-      >
-        <span className="flex items-center gap-1.5">
-          <Grid className="h-3.5 w-3.5" /> All niches
-        </span>
-        <ChevronRight className="hidden h-3 w-3 lg:block" />
-      </button>
-      {niches.map((n) => (
+      {/* master row: select "All niches" (every lead) + show/hide the niche list */}
+      <div className="flex shrink-0 items-stretch gap-1 lg:w-full">
         <button
-          key={n.id}
-          onClick={() => setNicheId(n.id)}
+          onClick={() => setNicheId(0)}
           className={cn(
-            "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold lg:w-full lg:justify-between lg:rounded-lg",
-            nicheId === n.id ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600",
+            "flex min-w-0 flex-1 shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold lg:justify-between lg:rounded-lg",
+            nicheId === 0 ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600",
           )}
         >
           <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: n.color }} />
-            <span className="max-w-[140px] truncate lg:max-w-none">{n.name}</span>
+            <Grid className="h-3.5 w-3.5" /> All niches
           </span>
           <span className="hidden shrink-0 text-[10px] font-normal text-muted-foreground lg:block">
-            {(n.total ?? 0).toLocaleString("en-IN")}
+            {allTotal.toLocaleString("en-IN")}
           </span>
         </button>
-      ))}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={nichesOpen}
+          aria-label={nichesOpen ? "Hide niche list" : "Show niche list"}
+          title={nichesOpen ? "Hide niche list" : "Show niche list"}
+          onClick={toggleNiches}
+          className={cn(
+            "flex shrink-0 items-center gap-1 rounded-full border px-2 text-[10px] font-bold lg:rounded-lg",
+            nichesOpen ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-500",
+          )}
+        >
+          <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", !nichesOpen && "-rotate-90")} />
+          <span className="hidden sm:inline">{nichesOpen ? "ON" : "OFF"}</span>
+        </button>
+      </div>
+
+      {/* sub-niches — hidden/shown by the master toggle; filtering is unaffected */}
+      {nichesOpen
+        ? niches.map((n) => (
+            <div key={n.id} className="flex shrink-0 items-stretch gap-1 lg:w-full">
+              <button
+                onClick={() => setNicheId(n.id)}
+                className={cn(
+                  "flex min-w-0 flex-1 shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold lg:justify-between lg:rounded-lg",
+                  nicheId === n.id ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600",
+                )}
+              >
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: n.color }} />
+                  <span className="max-w-[140px] truncate lg:max-w-none">{n.name}</span>
+                </span>
+                <span className="hidden shrink-0 text-[10px] font-normal text-muted-foreground lg:block">
+                  {(n.total ?? 0).toLocaleString("en-IN")}
+                </span>
+              </button>
+              {canDeleteNiche ? (
+                <button
+                  type="button"
+                  onClick={() => setDeletingNiche(n)}
+                  aria-label={`Delete niche ${n.name}`}
+                  title={`Delete “${n.name}”`}
+                  className="flex w-8 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-600 transition hover:bg-rose-100 lg:rounded-lg"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
+            </div>
+          ))
+        : activeNiche ? (
+            /* list is collapsed but a niche filter is still active — never leave it invisible */
+            <button
+              onClick={() => setNicheId(0)}
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-blue-300 bg-blue-50 px-3 py-1.5 text-[11px] font-semibold text-blue-700 lg:w-full lg:rounded-lg"
+              title="Clear niche filter — show all leads"
+            >
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: activeNiche.color }} />
+              <span className="truncate">Filtered: {activeNiche.name}</span>
+              <X className="ml-auto h-3 w-3 shrink-0" />
+            </button>
+          ) : null}
     </>
   );
 
@@ -398,6 +482,14 @@ export function AppShell({
                 {nicheId ? `Niche: ${niches.find((n) => n.id === nicheId)?.name}` : "All niches"} · {roleLabel}
               </p>
             </div>
+            <span
+              className="hidden shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold text-slate-500 sm:flex"
+              title="Auto-sync every 60 seconds — live views refresh on each pulse"
+            >
+              <RefreshCw className="h-3 w-3 text-emerald-600" />
+              Last Sync <span className="font-mono tabular-nums text-slate-700">{lastSync || "—"}</span>
+            </span>
+            {user.role === "AGENT" ? <HeaderActivity /> : null}
             <ThemeSwitcher />
             <NotificationCenter isStaff={user.role !== "AGENT"} />
           </header>
@@ -439,6 +531,18 @@ export function AppShell({
           </main>
         </div>
       </div>
+
+      <DeleteNicheDialog
+        niche={deletingNiche ? { id: deletingNiche.id, name: deletingNiche.name, total: deletingNiche.total } : null}
+        onClose={() => setDeletingNiche(null)}
+        onDeleted={(deleted) => {
+          if (nicheId === deleted.id) {
+            setNicheState(0);
+            window.localStorage.setItem("tc_niche", "0");
+          }
+          router.refresh();
+        }}
+      />
 
       {/* mobile bottom nav */}
       <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t bg-white/95 backdrop-blur pb-[env(safe-area-inset-bottom)] lg:hidden">
@@ -522,13 +626,13 @@ export function AppShell({
           </div>
 
           {user.role === "AGENT" ? (
-            <a href="/agent/profile" className="flex items-center gap-2 rounded-xl border p-3 text-sm font-medium hover:bg-slate-50">
+            <Link href="/agent/profile" className="flex items-center gap-2 rounded-xl border p-3 text-sm font-medium hover:bg-slate-50">
               <IdCard className="h-4 w-4" /> My Profile, ID Card &amp; KYC
-            </a>
+            </Link>
           ) : (
-            <a href="/agents" className="flex items-center gap-2 rounded-xl border p-3 text-sm font-medium hover:bg-slate-50">
+            <Link href="/agents" className="flex items-center gap-2 rounded-xl border p-3 text-sm font-medium hover:bg-slate-50">
               <Users className="h-4 w-4" /> Team &amp; Agents
-            </a>
+            </Link>
           )}
 
           <div className="rounded-xl border p-3">

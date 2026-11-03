@@ -71,3 +71,9 @@ export async function hiddenNicheIds(): Promise<number[]> {
   const all = await nicheOptions();
   return all.filter((n) => n.visibleToAgents === false).map((n) => n.id);
 }
+
+/** Total number of leads, regardless of niche — the "All niches" count. */
+export async function allLeadsCount() {
+  const [row] = await db.select({ total: sql<number>`count(*)::int` }).from(leads);
+  return Number(row?.total ?? 0);
+}

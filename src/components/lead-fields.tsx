@@ -2,6 +2,7 @@
 
 import { ExternalLink, EyeOff, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SecureLink } from "@/components/shared/secure-link";
 
 /**
  * Dynamic field renderer driven by the admin visibility matrix.
@@ -39,15 +40,13 @@ export function FieldValue({ field, className }: { field: PolicyField; className
 
   if (field.render === "link") {
     return (
-      <a
+      <SecureLink
         href={raw.startsWith("http") ? raw : `https://${raw}`}
-        target="_blank"
-        rel="noreferrer"
         className={cn("inline-flex max-w-full items-center gap-1 truncate text-blue-600 underline decoration-dotted", className)}
       >
         <span className="truncate">{raw.replace(/^https?:\/\//, "")}</span>
         <ExternalLink className="h-3 w-3 shrink-0" />
-      </a>
+      </SecureLink>
     );
   }
 

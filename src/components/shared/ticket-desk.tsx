@@ -1,13 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Eraser, Loader2, MessageSquare, Trash2, Paperclip, Plus, RefreshCcw, Send, Ticket as TicketIcon } from "lucide-react";
+import { Eraser, Loader2, MessageSquare, Trash2, Plus, RefreshCcw, Send, Ticket as TicketIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge, EmptyState, Input, Label, NativeSelect, SectionCard, Stat, Textarea } from "@/components/ui/field";
 import { Sheet } from "@/components/ui/dialog";
 import { OpenLeadButton } from "@/components/shared/lead-peek";
 import { cn, dateTime, timeAgo } from "@/lib/utils";
+import { SecureLink } from "@/components/shared/secure-link";
+import { AttachmentPreview, type ChatAttachment } from "@/components/shared/attachment-preview";
+import { AttachButton, AttachmentChip, useAttachmentUpload } from "@/components/shared/attachment-composer";
 
 type Ticket = {
   id: number;
@@ -17,6 +20,7 @@ type Ticket = {
   subject: string;
   details: string;
   proofUrl: string | null;
+  proof?: ChatAttachment | null;
   status: string;
   priority: string;
   resolution: string | null;
@@ -34,6 +38,7 @@ type Message = {
   fromUserId: string;
   body: string;
   attachmentUrl: string | null;
+  attachment?: ChatAttachment | null;
   createdAt: string;
   senderName: string;
   senderRole: string;
@@ -90,8 +95,9 @@ export function TicketDesk({ isStaff = false }: { isStaff?: boolean }) {
   const visibleRows = segment === "requests" ? [] : rows.filter((t) => bucketFor(t.category) === segment);
 
   const [form, setForm] = useState({ category: "ACCESS_ISSUE", subject: "", details: "" });
-  const [proofUrl, setProofUrl] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement | null>(null);
+  // attachments → Backblaze B2 (new-ticket proof and chat replies are independent)
+  const proofAtt = useAttachmentUpload("TICKET_PROOF");
+  const replyAtt = useAttachmentUpload("TICKET_CHAT");
 
   // active ticket thread
   const [activeId, setActiveId] = useState<number | null>(null);
@@ -164,51 +170,41 @@ export function TicketDesk({ isStaff = false }: { isStaff?: boolean }) {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [thread?.messages.length]);
 
-  async function uploadProof(file: File) {
-    const body = new FormData();
-    body.append("file", file);
-    body.append("kind", "TICKET_PROOF");
-    const res = await fetch("/api/upload", { method: "POST", body });
-    const json = (await res.json()) as { url?: string; error?: string };
-    if (!res.ok || !json.url) {
-      toast.error(json.error ?? "Upload failed");
-      return;
-    }
-    setProofUrl(json.url);
-    toast.success("Attachment ready");
-  }
-
   async function submit() {
     setBusy(true);
     const res = await fetch("/api/tickets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, proofUrl }),
+      body: JSON.stringify({ ...form, proofUrl: proofAtt.pending?.url ?? null }),
     });
     const json = (await res.json()) as { error?: string; ticket?: Ticket };
     if (res.ok) {
       toast.success(`Ticket ${json.ticket?.ticketNumber} created`);
       setOpen(false);
       setForm({ category: form.category, subject: "", details: "" });
-      setProofUrl(null);
+      proofAtt.clear();
       await load();
     } else toast.error(json.error ?? "Could not create ticket");
     setBusy(false);
   }
 
   async function sendReply() {
-    if (!activeId || (!reply.trim() && !proofUrl)) return;
+    if (!activeId || replyAtt.uploading || (!reply.trim() && !replyAtt.pending)) return;
     setBusy(true);
     const res = await fetch("/api/tickets", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: activeId, message: reply.trim(), attachmentUrl: proofUrl }),
+      body: JSON.stringify({ id: activeId, message: reply.trim(), attachmentUrl: replyAtt.pending?.url ?? null }),
     });
     if (res.ok) {
       setReply("");
+      replyAtt.clear();
       await loadThread(activeId);
       await load();
-    } else toast.error("Could not send");
+    } else {
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      toast.error(json.error ?? "Could not send");
+    }
     setBusy(false);
   }
 
@@ -460,22 +456,8 @@ export function TicketDesk({ isStaff = false }: { isStaff?: boolean }) {
           </div>
           <div className="space-y-1">
             <Label>Attachment / proof (optional)</Label>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*,application/pdf"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void uploadProof(f);
-              }}
-            />
-            <Button variant="outline" className="w-full" onClick={() => fileRef.current?.click()}>
-              <Paperclip className="h-4 w-4" /> {proofUrl ? "Attached — replace" : "Attach screenshot / file"}
-            </Button>
-            {proofUrl ? (
-              <p className="truncate rounded-lg bg-emerald-50 px-2 py-1 text-[10px] text-emerald-700">Attached: {proofUrl}</p>
-            ) : null}
+            <AttachButton att={proofAtt} label={proofAtt.pending ? "Replace file" : "Attach screenshot / file"} className="w-full" />
+            <AttachmentChip att={proofAtt} />
           </div>
         </div>
       </Sheet>
@@ -487,18 +469,35 @@ export function TicketDesk({ isStaff = false }: { isStaff?: boolean }) {
         title={thread ? `#${thread.ticket.ticketNumber} — ${thread.ticket.subject}` : "Ticket"}
         description={thread ? `${thread.ticket.category.replace(/_/g, " ")} · opened ${dateTime(thread.ticket.createdAt)}` : ""}
         footer={
-          <div className="flex items-center gap-2">
-            <Input
-              value={reply}
-              onChange={(e) => setReply(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void sendReply();
-              }}
-              placeholder={isStaff ? "Reply to the agent…" : "Add more detail…"}
-            />
-            <Button size="icon" disabled={busy} onClick={() => void sendReply()} aria-label="Send">
-              <Send className="h-4 w-4" />
-            </Button>
+          <div className="space-y-2">
+            <AttachmentChip att={replyAtt} />
+            <div className="flex items-center gap-2">
+              <AttachButton att={replyAtt} iconOnly label="Attach image, PDF or document" disabled={busy} />
+              <Input
+                value={reply}
+                onChange={(e) => setReply(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void sendReply();
+                }}
+                onPaste={(e) => {
+                  // paste a screenshot straight into the chat
+                  const f = Array.from(e.clipboardData.files)[0];
+                  if (f) {
+                    e.preventDefault();
+                    void replyAtt.attach(f);
+                  }
+                }}
+                placeholder={isStaff ? "Reply to the agent…" : "Add more detail…"}
+              />
+              <Button
+                size="icon"
+                disabled={busy || replyAtt.uploading || (!reply.trim() && !replyAtt.pending)}
+                onClick={() => void sendReply()}
+                aria-label="Send"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         }
       >
@@ -517,10 +516,12 @@ export function TicketDesk({ isStaff = false }: { isStaff?: boolean }) {
                   <OpenLeadButton leadId={thread.ticket.leadId} isStaff={Boolean(isStaff)} label="Open related lead" />
                 </span>
               ) : null}
-              {thread.ticket.proofUrl ? (
-                <a href={thread.ticket.proofUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[11px] text-blue-600 underline">
+              {thread.ticket.proof ? (
+                <AttachmentPreview attachment={thread.ticket.proof} />
+              ) : thread.ticket.proofUrl ? (
+                <SecureLink href={thread.ticket.proofUrl} className="mt-1 inline-block text-[11px] text-blue-600 underline">
                   View attachment
-                </a>
+                </SecureLink>
               ) : null}
             </div>
 
@@ -582,16 +583,18 @@ export function TicketDesk({ isStaff = false }: { isStaff?: boolean }) {
                         <p className={cn("text-[9px] font-semibold uppercase", mine ? "text-blue-100" : "text-slate-400")}>
                           {m.senderName} · {m.senderRole}
                         </p>
-                        <p className="mt-0.5 whitespace-pre-wrap">{m.body}</p>
-                        {m.attachmentUrl ? (
-                          <a
+                        {m.attachment && /^(📎 Attachment|\(attachment\))$/.test(m.body) ? null : (
+                          <p className="mt-0.5 whitespace-pre-wrap">{m.body}</p>
+                        )}
+                        {m.attachment ? (
+                          <AttachmentPreview attachment={m.attachment} />
+                        ) : m.attachmentUrl ? (
+                          <SecureLink
                             href={m.attachmentUrl}
-                            target="_blank"
-                            rel="noreferrer"
                             className={cn("mt-1 block underline", mine ? "text-blue-100" : "text-blue-600")}
                           >
                             attachment
-                          </a>
+                          </SecureLink>
                         ) : null}
                         <p className={cn("mt-1 text-[9px]", mine ? "text-blue-100" : "text-muted-foreground")}>{timeAgo(m.createdAt)}</p>
                       </div>
@@ -606,10 +609,6 @@ export function TicketDesk({ isStaff = false }: { isStaff?: boolean }) {
               <Button variant="outline" size="sm" className="w-full" onClick={() => void clearChat()} disabled={busy}>
                 <Eraser className="h-4 w-4" /> Remove / Clear Chat
               </Button>
-              <Button variant="outline" size="sm" className="w-full" onClick={() => fileRef.current?.click()}>
-                <Paperclip className="h-4 w-4" /> {proofUrl ? "Attachment ready" : "Attach to next reply"}
-              </Button>
-              {proofUrl ? <p className="truncate text-[10px] text-emerald-700">{proofUrl}</p> : null}
             </div>
           </div>
         ) : null}

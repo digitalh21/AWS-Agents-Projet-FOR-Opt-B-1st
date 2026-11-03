@@ -66,6 +66,7 @@ export function PipelineBoard() {
   // bulk selection (multi-lead actions work on the Kanban too)
   const [selected, setSelected] = useState<number[]>([]);
   const [busyBulk, setBusyBulk] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const boardRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
@@ -86,6 +87,16 @@ export function PipelineBoard() {
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  /* auto-sync: silent re-fetch on the shell's 60s pulse */
+  useEffect(() => {
+    const onSync = () => {
+      setSyncing(true);
+      void load().finally(() => setSyncing(false));
+    };
+    window.addEventListener("ags-autosync", onSync);
+    return () => window.removeEventListener("ags-autosync", onSync);
   }, [load]);
 
   const agents = useMemo(() => roster.filter((r) => r.role === "AGENT"), [roster]);
@@ -245,6 +256,12 @@ export function PipelineBoard() {
         onPool={async () => void (await bulkRun("pool"))}
         onFields={async (fields) => void (await bulkRun("fields", { fields }))}
       />
+      {syncing && !busyBulk ? (
+        <p className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+          <RefreshCcw className="h-3 w-3 animate-spin" /> auto-syncing board…
+        </p>
+      ) : null}
+
       {busyBulk ? (
         <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <Loader2 className="h-3 w-3 animate-spin" /> Applying bulk action to {selected.length} lead(s)…
@@ -386,7 +403,7 @@ export function PipelineBoard() {
                     ) : null}
 
                     <div className="pl-5">
-                      <OpenLeadButton leadId={card.id} leadCode={String(card.lead_code ?? card.id)} isStaff={true} label="Open Lead" />
+                      <OpenLeadButton leadId={card.id} leadCode={String(card.lead_code ?? card.id)} isStaff={true} label="View Lead" />
                     </div>
 
                     {/* quick stage move for accessibility / mobile */}

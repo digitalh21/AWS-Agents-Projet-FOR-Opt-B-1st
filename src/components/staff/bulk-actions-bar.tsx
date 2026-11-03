@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Gauge, Shuffle, SlidersHorizontal, UserPlus, X } from "lucide-react";
+import { Download, Gauge, Shuffle, SlidersHorizontal, Trash2, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input, Label, NativeSelect } from "@/components/ui/field";
@@ -9,7 +9,7 @@ import { Sheet } from "@/components/ui/dialog";
 import { LEAD_STATUSES, STATUS_META } from "@/lib/rbac";
 import { num } from "@/lib/utils";
 
-export type BulkAction = "assign" | "status" | "pool" | "fields" | "export";
+export type BulkAction = "assign" | "status" | "pool" | "fields" | "delete" | "export";
 
 /** Whitelisted keys for bulk field updates (mirrors /api/leads/bulk op=fields). */
 export const BULK_FIELD_KEYS = [
@@ -30,6 +30,8 @@ export function BulkActionsBar({
   onStatus,
   onPool,
   onFields,
+  onDelete,
+  canDelete = false,
 }: {
   selectedIds: number[];
   agents: Array<{ id: string; name: string; role: string }>;
@@ -39,6 +41,9 @@ export function BulkActionsBar({
   onStatus: (status: string) => Promise<void>;
   onPool: () => Promise<void>;
   onFields: (fields: Record<string, string>) => Promise<void>;
+  /** ADMIN-only bulk delete — the parent passes the wired action only for Admins */
+  onDelete?: () => Promise<void>;
+  canDelete?: boolean;
 }) {
   const [dialog, setDialog] = useState<BulkAction | null>(null);
   const [agentId, setAgentId] = useState("");
@@ -61,6 +66,10 @@ export function BulkActionsBar({
       } else if (dialog === "pool") {
         await onPool();
         toast.success(`${count} lead(s) returned to the Pool (status preserved)`);
+      } else if (dialog === "delete") {
+        if (!onDelete) throw new Error("Delete not permitted");
+        await onDelete();
+        toast.success(`${count} lead(s) deleted`);
       } else if (dialog === "fields") {
         const fields: Record<string, string> = {};
         for (const row of fieldRows) if (row.k && row.v.trim() !== "") fields[row.k] = row.v.trim();
@@ -107,6 +116,11 @@ export function BulkActionsBar({
         <Button size="xs" variant="outline" onClick={() => setDialog("fields")}>
           <SlidersHorizontal className="h-3 w-3" /> Update Fields
         </Button>
+        {canDelete ? (
+          <Button size="xs" variant="ghost" className="text-rose-600 hover:bg-rose-50" onClick={() => setDialog("delete")}>
+            <Trash2 className="h-3 w-3" /> Delete
+          </Button>
+        ) : null}
         <Button size="xs" variant="outline" onClick={() => exportCsv()}>
           <Download className="h-3 w-3" /> Bulk Export
         </Button>
@@ -148,7 +162,7 @@ export function BulkActionsBar({
               }
               onClick={() => void run()}
             >
-              Apply to {count} lead{count === 1 ? "" : "s"}
+              {dialog === "delete" ? `Delete ${count} lead${count === 1 ? "" : "s"} — irreversible` : `Apply to ${count} lead${count === 1 ? "" : "s"}`}
             </Button>
           </div>
         }
@@ -223,6 +237,16 @@ export function BulkActionsBar({
               <p className="mt-0.5">
                 Assignment state and pipeline status are independent — these leads keep their current status
                 (e.g. “No Response”) but their <em>Assigned To</em> becomes <strong>Pool</strong>.
+              </p>
+            </div>
+          ) : null}
+
+          {dialog === "delete" ? (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-[11px] text-rose-800">
+              <p className="font-bold">Destructive action</p>
+              <p className="mt-1">
+                This permanently deletes all <strong>{count}</strong> selected lead(s), their call logs and proofs.
+                The action is written to the audit trail and cannot be undone from the UI.
               </p>
             </div>
           ) : null}

@@ -4,9 +4,13 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { AppShell } from "@/components/app-shell";
+import { SecurityGuard } from "@/components/shared/security-guard";
+import { FeatureFlagsProvider } from "@/components/shared/feature-flags";
+import { MaintenanceGate } from "@/components/shared/maintenance-gate";
+import { getPublicFlags } from "@/lib/settings";
 import { getImpersonatorId, getSessionUser } from "@/lib/auth";
 import { navForRole } from "@/lib/rbac";
-import { nichesForRole } from "@/lib/queries";
+import { allLeadsCount, nichesForRole } from "@/lib/queries";
 import { ensureSeed } from "@/lib/seed";
 
 export const dynamic = "force-dynamic";
@@ -32,16 +36,27 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // Agents only see niches marked "Visible to Agents"; staff always see all of them.
   const { visible: nicheRows } = await nichesForRole(user.role);
 
+  const [flags, allTotal] = await Promise.all([getPublicFlags(), allLeadsCount().catch(() => 0)]);
+
   const navItems = navForRole(user.role).map((n) => ({ href: n.href, label: n.label, icon: n.icon }));
 
   return (
+    /* SecurityGuard WRAPS the app: it provides the interaction context used
+       by the live counter, the quota gate and the lead-open telemetry. */
+    <FeatureFlagsProvider initial={flags}>
+    <SecurityGuard role={user.role}>
+    <MaintenanceGate role={user.role} bypass={Boolean(impersonatorName)}>
     <AppShell
       user={{ id: user.id, name: user.name, email: user.email, role: user.role, phone: user.phone }}
       niches={nicheRows}
+      allTotal={allTotal}
       navItems={navItems}
       impersonator={impersonatorName ? { name: impersonatorName } : null}
     >
       {children}
     </AppShell>
+    </MaintenanceGate>
+    </SecurityGuard>
+    </FeatureFlagsProvider>
   );
 }

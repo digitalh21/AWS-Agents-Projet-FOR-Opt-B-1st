@@ -241,7 +241,7 @@ export async function b2Upload(
 
 /**
  * Fetches an object's bytes using the application key (works on PRIVATE buckets).
- * A Range header is passed through so video/audio seeking works via the proxy.
+ * A Range header is passed through so audio seeking works via the proxy.
  */
 export async function b2Fetch(
   key: string,

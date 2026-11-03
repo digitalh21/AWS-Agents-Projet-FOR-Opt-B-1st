@@ -33,14 +33,15 @@ export async function GET() {
         walletPending: users.walletPending,
         walletApproved: users.walletApproved,
         commissionPerDeal: users.commissionPerDeal,
+        dailyClickQuota: users.dailyClickQuota,
         upiId: users.upiId,
         bankName: users.bankName,
         bankAccount: users.bankAccount,
         bankIfsc: users.bankIfsc,
-        leadCount: sql<number>`(select count(*) from ${leads} where ${leads.assignedAgentId} = ${users.id})::int`,
-        closedCount: sql<number>`(select count(*) from ${leads} where ${leads.assignedAgentId} = ${users.id} and ${leads.status} = 'CLOSED')::int`,
-        calls: sql<number>`(select count(*) from ${callLogs} where ${callLogs.agentId} = ${users.id} and ${callLogs.status} <> 'DIALING')::int`,
-        talkSeconds: sql<number>`(select coalesce(sum(${callLogs.durationSeconds}),0) from ${callLogs} where ${callLogs.agentId} = ${users.id})::int`,
+        leadCount: sql<number>`(select count(*) from pipeline_leads pl where pl.assigned_agent_id = "users"."id")::int`,
+        closedCount: sql<number>`(select count(*) from pipeline_leads pl where pl.assigned_agent_id = "users"."id" and pl.status = 'CLOSED')::int`,
+        calls: sql<number>`(select count(*) from call_logs cl where cl.agent_id = "users"."id" and cl.status <> 'DIALING')::int`,
+        talkSeconds: sql<number>`(select coalesce(sum(cl.duration_seconds),0) from call_logs cl where cl.agent_id = "users"."id")::int`,
       })
       .from(users)
       .leftJoin(niches, eq(niches.id, users.primaryNicheId))
@@ -67,6 +68,13 @@ export async function PATCH(request: Request) {
     if (typeof body.isOnline === "boolean") patch.isOnline = body.isOnline;
     if (body.primaryNicheId !== undefined) patch.primaryNicheId = body.primaryNicheId ? Number(body.primaryNicheId) : null;
     if (body.commissionPerDeal !== undefined) patch.commissionPerDeal = String(body.commissionPerDeal);
+    // Daily Click Quota allocation (null = unlimited, 0 = locked out)
+    if (body.dailyClickQuota !== undefined) {
+      patch.dailyClickQuota =
+        body.dailyClickQuota === null || body.dailyClickQuota === ""
+          ? null
+          : Math.max(0, Math.min(100000, Math.floor(Number(body.dailyClickQuota))));
+    }
     if (body.walletAdjust !== undefined && Number(body.walletAdjust) !== 0) {
       patch.walletPending = sql`greatest(${users.walletPending} + ${Number(body.walletAdjust)}, 0)`;
       patch.walletTotal = sql`greatest(${users.walletTotal} + ${Number(body.walletAdjust)}, 0)`;

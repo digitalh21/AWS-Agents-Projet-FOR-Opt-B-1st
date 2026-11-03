@@ -497,6 +497,20 @@ export async function PUT(request: Request) {
       return ok({ updated: ids.length, op: "fields", fields: accepted });
     }
 
+    if (op === "delete") {
+      // HARD restriction: bulk delete is ADMIN-only, even for other staff.
+      if (staff.role !== "ADMIN") return fail("Only ADMIN can bulk delete leads", 403);
+      const del = await db.delete(leads).where(inArray(leads.id, ids)).returning({ id: leads.id });
+      await audit({
+        actorId: staff.id,
+        actorRole: staff.role,
+        action: "BULK_DELETE",
+        detail: `${del.length} lead(s) permanently deleted`,
+        meta: { ids: del.map((d) => d.id) },
+      });
+      return ok({ deleted: del.length, op: "delete" });
+    }
+
     if (op === "export") {
       const rows = await db
         .select({
@@ -509,13 +523,13 @@ export async function PUT(request: Request) {
           status: leads.status,
           rating: leads.rating,
           reviewsCount: leads.reviewsCount,
-          niche: niches.name,
+          niche: sql<string>`coalesce(${niches.name}, 'Uncategorised')`,
           agent: users.name,
           unassignReason: leads.unassignReason,
           dealAmount: leads.dealAmount,
         })
         .from(leads)
-        .innerJoin(niches, eq(niches.id, leads.nicheId))
+        .leftJoin(niches, eq(niches.id, leads.nicheId))
         .leftJoin(users, eq(users.id, leads.assignedAgentId))
         .where(sql`${leads.id} = any(${sql.raw(`array[${ids.join(",")}]`)})`)
         .orderBy(leads.id);

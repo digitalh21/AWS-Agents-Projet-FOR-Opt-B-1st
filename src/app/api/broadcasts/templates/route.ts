@@ -19,7 +19,6 @@ const PREMADE: Array<{
   body: string;
   kind: "POPUP" | "BANNER";
   imageUrl?: string;
-  videoUrl?: string;
   audioUrl?: string;
 }> = [
   {
@@ -61,7 +60,6 @@ async function ensurePremadeTemplates() {
       body: t.body,
       kind: t.kind,
       imageUrl: t.imageUrl ?? null,
-      videoUrl: t.videoUrl ?? null,
       audioUrl: t.audioUrl ?? null,
       createdBy: null,
     });
@@ -95,7 +93,6 @@ export async function POST(request: Request) {
       body?: string;
       kind?: string;
       imageUrl?: string | null;
-      videoUrl?: string | null;
       audioUrl?: string | null;
     };
     const title = (body.title ?? "").trim();
@@ -116,7 +113,6 @@ export async function POST(request: Request) {
         body: text,
         kind: body.kind === "BANNER" ? "BANNER" : "POPUP",
         imageUrl: clean(body.imageUrl),
-        videoUrl: clean(body.videoUrl),
         audioUrl: clean(body.audioUrl),
         createdBy: staff.id,
         updatedBy: staff.id,
@@ -147,7 +143,6 @@ export async function PATCH(request: Request) {
       body?: string;
       kind?: string;
       imageUrl?: string | null;
-      videoUrl?: string | null;
       audioUrl?: string | null;
     };
     const id = Number(body.id ?? 0);
@@ -164,7 +159,6 @@ export async function PATCH(request: Request) {
     if (typeof body.body === "string" && body.body.trim().length >= 3) patch.body = body.body.trim();
     if (body.kind === "BANNER" || body.kind === "POPUP") patch.kind = body.kind;
     if (body.imageUrl !== undefined) patch.imageUrl = clean(body.imageUrl);
-    if (body.videoUrl !== undefined) patch.videoUrl = clean(body.videoUrl);
     if (body.audioUrl !== undefined) patch.audioUrl = clean(body.audioUrl);
 
     const [row] = await db

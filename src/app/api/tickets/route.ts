@@ -1,3 +1,4 @@
+import { attachmentMeta, validateAttachment } from "@/lib/ticket-attachments";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { notifications, ticketMessages, tickets, users } from "@/db/schema";
@@ -96,7 +97,11 @@ export async function GET(request: Request) {
           .where(sql`${ticketMessages.id} = any(${sql.raw(`array[${otherIds.join(",")}]`)}) and ${ticketMessages.readAt} is null`);
       }
 
-      return ok({ ticket, messages });
+      const meta = await attachmentMeta([ticket.proofUrl, ...messages.map((m) => m.attachmentUrl)]);
+      return ok({
+        ticket: { ...ticket, proof: ticket.proofUrl ? (meta.get(ticket.proofUrl) ?? null) : null },
+        messages: messages.map((m) => ({ ...m, attachment: m.attachmentUrl ? (meta.get(m.attachmentUrl) ?? null) : null })),
+      });
     }
 
     const rows = await db
@@ -171,6 +176,10 @@ export async function POST(request: Request) {
     const details = (body.details ?? "").trim();
     if (subject.length < 4) return fail("Add a short subject (min 4 characters)", 422);
     if (details.length < 10) return fail("Describe the issue in at least 10 characters", 422);
+
+    const proof = await validateAttachment(body.proofUrl, user.id);
+    if (!proof.ok) return fail(proof.error, 422);
+    body.proofUrl = proof.url ?? undefined;
 
     const ticketNumber = await nextTicketNumber();
     const [row] = await db
@@ -353,18 +362,23 @@ export async function PUT(request: Request) {
     const message = (body.message ?? "").trim();
     if (!id) return fail("id required", 422);
     if (!message && !body.attachmentUrl) return fail("Message is empty", 422);
+    if (message.length > 4000) return fail("Message is too long (max 4000 characters)", 422);
 
     const [ticket] = await db.select().from(tickets).where(eq(tickets.id, id)).limit(1);
     if (!ticket) return fail("Ticket not found", 404);
     // Strictly 1-on-1: the ticket owner or staff.
     if (ticket.userId !== user.id && !isStaff(user.role)) return fail("Not permitted", 403);
 
+    const attachment = await validateAttachment(body.attachmentUrl, user.id);
+    if (!attachment.ok) return fail(attachment.error, 422);
+    body.attachmentUrl = attachment.url ?? undefined;
+
     const [msg] = await db
       .insert(ticketMessages)
       .values({
         ticketId: id,
         fromUserId: user.id,
-        body: message || "(attachment)",
+        body: message || "📎 Attachment",
         attachmentUrl: body.attachmentUrl ?? null,
       })
       .returning();

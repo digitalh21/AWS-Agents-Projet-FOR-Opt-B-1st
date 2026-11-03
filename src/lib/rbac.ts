@@ -148,6 +148,7 @@ export type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "grid", roles: ["ADMIN", "HR", "MANAGER", "AGENT"] },
   { href: "/agent", label: "My Leads", icon: "phone", roles: ["AGENT"] },
+  { href: "/lead-sheet", label: "Lead Sheet", icon: "table", roles: ["AGENT", "ADMIN", "HR", "MANAGER"] },
   { href: "/agent/earnings", label: "Earnings", icon: "wallet", roles: ["AGENT"] },
   { href: "/agent/profile", label: "Profile & KYC", icon: "id-card", roles: ["AGENT"] },
   { href: "/pipeline", label: "Lead Pipeline", icon: "kanban", roles: ["ADMIN", "HR", "MANAGER"] },
@@ -159,9 +160,8 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/agent-slabs", label: "Agent Slabs & Quotas", icon: "sliders", roles: ["ADMIN", "HR", "MANAGER"] },
   { href: "/niches", label: "Niche Manager", icon: "tags", roles: ["ADMIN", "HR", "MANAGER"] },
   { href: "/broadcasts", label: "Banners & Popups", icon: "megaphone", roles: ["ADMIN", "HR", "MANAGER"] },
-  { href: "/videos", label: "Video Studio", icon: "film", roles: ["ADMIN", "HR", "MANAGER"] },
   { href: "/files", label: "File Manager", icon: "folder", roles: ["ADMIN", "HR", "MANAGER"] },
-  { href: "/settings", label: "Field Visibility", icon: "settings", roles: ["ADMIN", "HR", "MANAGER"] },
+  { href: "/settings", label: "Admin Control Panel", icon: "settings", roles: ["ADMIN", "HR", "MANAGER"] },
   { href: "/audit-logs", label: "Audit Trail", icon: "scroll", roles: ["ADMIN", "HR", "MANAGER"] },
   { href: "/automation", label: "Automation / Cron", icon: "timer", roles: ["ADMIN", "HR", "MANAGER"] },
 ];

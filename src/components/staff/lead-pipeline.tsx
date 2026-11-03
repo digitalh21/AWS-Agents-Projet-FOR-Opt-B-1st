@@ -1,19 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Eye,
-  Kanban,
-  LayoutList,
-  Lock,
-  RefreshCcw,
-  Search,
-  Shuffle,
-  Upload,
-  Users,
-} from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, Eye, Kanban, LayoutList, Lock, RefreshCcw, Search, Shuffle, Upload, Users, Download, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 import { useApp } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -118,6 +106,28 @@ export function LeadPipeline() {
     setPage(1);
     setSelected([]);
   }, [nicheId, status, agentId, q]);
+
+  /** Opens the server-rendered export for the CURRENT filters (all leads, not just the page). */
+  function downloadLeads(format: "csv" | "xls") {
+    const params = new URLSearchParams({ format });
+    if (nicheId) params.set("nicheId", String(nicheId));
+    if (status && status !== "ALL") params.set("status", status);
+    if (agentId) params.set("agentId", String(agentId));
+    if (q.trim()) params.set("q", q.trim());
+    window.open(`/api/leads/export?${params.toString()}`, "_self");
+  }
+
+  /* auto-sync: refresh the table on the shell's 60s pulse */
+  useEffect(() => {
+    const onSync = () => {
+      setLoadingSoft(true);
+      void load().finally(() => setLoadingSoft(false));
+    };
+    window.addEventListener("ags-autosync", onSync);
+    return () => window.removeEventListener("ags-autosync", onSync);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load]);
+  const [loadingSoft, setLoadingSoft] = useState(false);
 
   async function bulkRun(op: string, extra: Record<string, unknown> = {}) {
     const res = await fetch(`/api/leads/bulk?op=${op}`, {
@@ -304,7 +314,7 @@ export function LeadPipeline() {
             onClick={() => void load()}
             aria-label="Refresh"
           >
-            <RefreshCcw className="h-4 w-4" />
+            {loadingSoft ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
           </Button>
         </div>
 
@@ -360,6 +370,17 @@ export function LeadPipeline() {
           >
             <Upload className="h-4 w-4" /> Upload CSV
           </Button>
+          {/* Management/Admin-only exports of the FULL filtered result set */}
+          {user.role !== "AGENT" ? (
+            <>
+              <Button variant="outline" size="sm" className="flex-1 sm:flex-none" onClick={() => downloadLeads("csv")}>
+                <Download className="h-4 w-4" /> Download Leads (CSV)
+              </Button>
+              <Button variant="outline" size="sm" className="flex-1 sm:flex-none" onClick={() => downloadLeads("xls")}>
+                <FileSpreadsheet className="h-4 w-4" /> Excel
+              </Button>
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -373,6 +394,8 @@ export function LeadPipeline() {
           onStatus={async (status) => bulkRun("status", { status })}
           onPool={async () => bulkRun("pool")}
           onFields={async (fields) => bulkRun("fields", { fields })}
+          canDelete={user.role === "ADMIN"}
+          onDelete={async () => bulkRun("delete")}
         />
       ) : null}
 
@@ -399,7 +422,8 @@ export function LeadPipeline() {
                     </th>
                   ))}
                   <th className="p-2">Status</th>
-                  <th className="p-2">Assigned To</th>
+                  <th className="p-2">Assigned Agent</th>
+                  <th className="p-2">Pipeline Status</th>
                   <th className="p-2">Access</th>
                   <th className="p-2 text-right">Actions</th>
                 </tr>
@@ -426,17 +450,23 @@ export function LeadPipeline() {
                       </td>
                     ))}
                     <td className="p-2">
-                      {statusSelect(lead)}
-                      <span className="mt-1 block text-[9px] text-muted-foreground">Status</span>
+                      <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold">
+                        {String(lead.leadStatus ?? lead.lead_status ?? "—").replace(/_/g, " ")}
+                      </span>
+                      <span className="mt-1 block text-[9px] text-muted-foreground">Lead status</span>
                     </td>
                     <td className="p-2">
                       <AssignedToBadge
                         agent={lead.assignedAgentId ? { id: lead.assignedAgentId, name: String(lead.agent_name ?? lead.agentName ?? "Agent") } : null}
                       />
-                      <div className="mt-1">{agentSelect(lead)}</div>
                       <span className="mt-0.5 block text-[9px] text-muted-foreground">
                         {lead.assignedAgentId ? "Assigned" : "Pool"}
                       </span>
+                    </td>
+                    <td className="p-2">
+                      {statusSelect(lead)}
+                      <div className="mt-1">{agentSelect(lead)}</div>
+                      <span className="mt-0.5 block text-[9px] text-muted-foreground">Stage · quick reassign</span>
                     </td>
                     <td className="p-2">
                       <button

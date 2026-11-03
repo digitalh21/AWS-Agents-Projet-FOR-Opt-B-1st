@@ -17,13 +17,14 @@ import {
   Save,
   ShieldAlert,
   ShieldCheck,
-  Target,
   Trophy,
   Unlock,
   Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { SafeImage } from "@/components/shared/safe-image";
+import { LiveActivityCounter } from "@/components/agent/live-activity-counter";
+import { useInteraction } from "@/components/shared/security-guard";
 import { Button } from "@/components/ui/button";
 import { Badge, Input, Label, NativeSelect, SectionCard, Stat, Textarea } from "@/components/ui/field";
 import { Sheet } from "@/components/ui/dialog";
@@ -86,6 +87,7 @@ const QUALIFICATIONS = ["10th", "12th", "Diploma", "Graduate", "Post Graduate", 
 const BADGE_OPTIONS = ["Star Caller", "Top Closer", "Consistent Performer", "Fast Starter", "Century Club", "Quality Champion"];
 
 export function AgentProfileView({ targetUserId }: { targetUserId?: string }) {
+  const interaction = useInteraction();
   const [data, setData] = useState<Payload | null>(null);
   const [form, setForm] = useState({
     bankName: "",
@@ -599,18 +601,6 @@ export function AgentProfileView({ targetUserId }: { targetUserId?: string }) {
           </Button>
         </SectionCard>
 
-        {/* ---------- pipeline breakdown ---------- */}
-        <SectionCard title="Pipeline Breakdown" icon={<Target className="h-3.5 w-3.5" />}>
-          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-            {["NEW", "IN_PROGRESS", "CALLBACK", "NO_RESPONSE", "PAYMENT_APPROVAL", "REJECTED", "CLOSED"].map((stage) => (
-              <div key={stage} className="rounded-lg bg-slate-50 p-2">
-                <p className="truncate text-[9px] uppercase text-muted-foreground">{STATUS_META[stage]?.label ?? stage}</p>
-                <p className="text-lg font-bold tabular-nums">{num(pipelineMap[stage] ?? 0)}</p>
-              </div>
-            ))}
-          </div>
-          <p className="mt-2 text-[11px] text-muted-foreground">Total leads assigned: {num(totalPipeline)}</p>
-        </SectionCard>
       </div>
 
       {/* ---------- staff-only: about + badges ---------- */}
@@ -654,6 +644,8 @@ export function AgentProfileView({ targetUserId }: { targetUserId?: string }) {
       ) : null}
 
       {/* ---------- daily activity logs ---------- */}
+
+      <LiveActivityCounter state={interaction.state} className="mb-3" />
 
       <SectionCard title="Daily Activity & Performance Logs" icon={<CalendarDays className="h-3.5 w-3.5" />}>
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">

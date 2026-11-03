@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { uploads } from "@/db/schema";
 import { b2Configured, b2Fetch } from "@/lib/b2";
@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
  *
  * - Content-Type is taken from the stored record (fallback: B2's value).
  * - Content-Disposition: inline for preview, `?dl=1` for attachment download.
- * - Range headers pass through so video/audio seeking works.
+ * - Range headers pass through so audio seeking works.
  */
 function safeName(fileName: string | null): string {
   const base = (fileName ?? "file").split(/[\\/]/).pop() ?? "file";
@@ -49,9 +49,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       .limit(1);
     if (!row) return new Response("Not found", { status: 404 });
 
-    // owner or management only
+    // owner or management — or the owner of a support ticket this file is attached to
+    // (so an agent can open the attachments staff post in their private ticket chat)
     if (row.userId !== user.id && !isStaff(user.role)) {
-      return new Response("Forbidden — this file belongs to another user", { status: 403 });
+      const ref = `/api/files/${row.id}`;
+      const shared = await db.execute<{ ok: number }>(sql`
+        select 1 as ok from tickets t
+        where t.user_id = ${user.id}
+          and (t.proof_url = ${ref}
+               or exists (select 1 from ticket_messages m where m.ticket_id = t.id and m.attachment_url = ${ref}))
+        limit 1
+      `);
+      if (shared.rows.length === 0) {
+        return new Response("Forbidden — this file belongs to another user", { status: 403 });
+      }
     }
 
     const disposition = `${new URL(request.url).searchParams.get("dl") ? "attachment" : "inline"}; filename="${safeName(row.fileName)}"`;
@@ -59,6 +70,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       "Content-Disposition": disposition,
       "Cache-Control": "private, max-age=86400",
       "Accept-Ranges": "bytes",
+      "X-Content-Type-Options": "nosniff",
       "X-Content-Driver": row.storageDriver ?? "postgres",
     };
 

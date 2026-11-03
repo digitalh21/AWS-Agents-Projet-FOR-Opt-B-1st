@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { SecureLink as Link } from "@/components/shared/secure-link";
 import { usePathname } from "next/navigation";
 import { Kanban, LayoutList } from "lucide-react";
 import { cn } from "@/lib/utils";

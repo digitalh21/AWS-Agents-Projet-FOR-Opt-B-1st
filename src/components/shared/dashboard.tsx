@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { SecureLink as Link } from "@/components/shared/secure-link";
 import {
   ArrowRight,
   BadgeIndianRupee,
@@ -13,6 +13,8 @@ import {
   Wallet,
 } from "lucide-react";
 import { ActivityTracker } from "@/components/shared/activity-tracker";
+import { LiveActivityCounter } from "@/components/agent/live-activity-counter";
+import { useInteraction } from "@/components/shared/security-guard";
 import { useApp } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { SectionCard, Stat } from "@/components/ui/field";
@@ -97,6 +99,7 @@ export function StageCounterCards({ scope, className }: { scope: "staff" | "agen
 }
 
 export function Dashboard() {
+  const interaction = useInteraction();
   const { user, niches } = useApp();
   const isAgent = user.role === "AGENT";
   const [earnings, setEarnings] = useState<Earnings | null>(null);
@@ -200,6 +203,7 @@ export function Dashboard() {
 
         {/* ---------- active time tracker ---------- */}
         <ActivityTracker />
+        <LiveActivityCounter state={interaction.state} />
 
         {/* ---------- quick actions ---------- */}
         <SectionCard title="Quick actions" icon={<TrendingUp className="h-3.5 w-3.5" />}>

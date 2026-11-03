@@ -10,7 +10,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const MAX_BYTES = 25 * 1024 * 1024;
-const ALLOWED = /^(image\/(png|jpe?g|webp|gif|heic|heif)|application\/(pdf|msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document|zip|x-zip-compressed)|video\/(mp4|webm|quicktime|x-matroska)|audio\/(mpeg|mp3|wav|ogg|m4a)|text\/(plain|csv))$/i;
+const ALLOWED =
+  /^(image\/(png|jpe?g|webp|gif|heic|heif)|application\/(pdf|msword|vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet|presentationml\.presentation)|vnd\.ms-(excel|powerpoint)|zip|x-zip-compressed)|audio\/(mpeg|mp3|wav|ogg|m4a)|text\/(plain|csv))$/i;
 
 /**
  * File / image upload endpoint.
@@ -35,10 +36,12 @@ export async function POST(request: Request) {
     const file = form.get("file");
     const leadIdRaw = form.get("leadId");
     const kind = String(form.get("kind") ?? "PROOF");
+    // Chat / ticket attachments must live in Backblaze B2 — never silently in Postgres.
+    const requireB2 = String(form.get("requireB2") ?? "") === "1";
 
     if (!(file instanceof File)) return fail("No file provided", 422);
     if (file.size > MAX_BYTES) return fail("File too large (max 25MB)", 413);
-    if (!ALLOWED.test(file.type)) return fail("Unsupported file type. Allowed: images, PDF, video (mp4/webm/mov), audio, documents.", 415);
+    if (!ALLOWED.test(file.type)) return fail("Unsupported file type. Allowed: images, PDF, audio, documents.", 415);
 
     const buffer = Buffer.from(await file.arrayBuffer());
 
@@ -66,6 +69,15 @@ export async function POST(request: Request) {
       } catch (e) {
         console.error("[upload] B2 threw — falling back to Postgres storage", e);
       }
+    }
+
+    if (!url && requireB2) {
+      return fail(
+        b2Configured()
+          ? "Attachment storage (Backblaze B2) is temporarily unavailable. Please try again."
+          : "Attachment storage (Backblaze B2) is not configured.",
+        503,
+      );
     }
 
     if (!url) {
@@ -123,6 +135,7 @@ export async function POST(request: Request) {
       previewUrl: driver === "b2" ? proxyUrl : url,
       dataUrl: inlineDataUrl,
       name: file.name,
+      mimeType: file.type,
       size: file.size,
     });
   } catch (error) {

@@ -84,7 +84,10 @@ export function ActivityTracker({ compact = false }: { compact?: boolean }) {
           const json = (await res.json()) as { today?: Snapshot };
           if (json.today) setToday(json.today);
           setLifetime((l) => l + payload);
-          setLastSync(new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+          setLastSync(
+            // full precision incl. milliseconds — e.g. 14:32:10.452
+            new Date().toLocaleTimeString("en-GB", { hour12: false, fractionalSecondDigits: 3 } as Intl.DateTimeFormatOptions),
+          );
         }
       } catch {
         /* offline — next tick retries */
@@ -93,7 +96,8 @@ export function ActivityTracker({ compact = false }: { compact?: boolean }) {
       }
     };
 
-    const timer = setInterval(sync, 60000);
+    // auto-save tracking progress to the database every 5 seconds
+    const timer = setInterval(sync, 5000);
     const onHide = () => {
       if (document.visibilityState === "hidden" && buffer > 0) void sync();
     };
@@ -164,7 +168,7 @@ export function ActivityTracker({ compact = false }: { compact?: boolean }) {
           tone={visible ? "info" : "warn"}
         />
         <Stat label="Lifetime tracked" value={hms(lifetime)} hint="all recorded activity" />
-        <Stat label="Last sync" value={syncing ? "syncing…" : lastSync ?? "—"} hint="every 60 seconds" />
+        <Stat label="Last sync" value={syncing ? "syncing…" : lastSync ?? "—"} hint="auto-saved every 5 seconds" />
       </div>
 
       {today ? (

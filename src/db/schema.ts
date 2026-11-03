@@ -86,6 +86,9 @@ export const users = pgTable(
     dailyLeadQuota: integer("daily_lead_quota"),
     // Per Day Lead Limit — ceiling for Pool auto-allocation (wins over legacy quota)
     dailyLeadLimit: integer("daily_lead_limit"),
+    // Daily Click Quota — max tracked interactions per day (null = unlimited).
+    // Allocated by Admin/HR; enforced server-side on every tracked action.
+    dailyClickQuota: integer("daily_click_quota"),
     // payout details
     bankName: text("bank_name"),
     bankAccount: text("bank_account"),
@@ -122,8 +125,13 @@ export const users = pgTable(
 /* ------------------------------------------------------------------ */
 /* Leads — 1M+ rows, server side pagination                            */
 /* ------------------------------------------------------------------ */
+/**
+ * LEGACY pipeline workflow table (stages, callbacks, commission, approvals).
+ * Physically renamed to `pipeline_leads` so the public `leads` table can be the
+ * strict 18-column lead sheet below (see supabase/schema.sql).
+ */
 export const leads = pgTable(
-  "leads",
+  "pipeline_leads",
   {
     id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
     // stable human-readable serial number
@@ -650,8 +658,6 @@ export const broadcasts = pgTable("broadcasts", {
   title: text("title").notNull(),
   body: text("body").notNull(),
   imageUrl: text("image_url"),
-  // VIDEO urls render as an auto-embedded iframe in the popup; AUDIO urls render a player
-  videoUrl: text("video_url"),
   audioUrl: text("audio_url"),
   // BANNER (passive strip) | POPUP (modal)
   kind: text("kind").notNull().default("POPUP"),
@@ -719,7 +725,6 @@ export const broadcastTemplates = pgTable("broadcast_templates", {
   title: text("title").notNull(),
   body: text("body").notNull(),
   imageUrl: text("image_url"),
-  videoUrl: text("video_url"),
   audioUrl: text("audio_url"),
   // BANNER | POPUP
   kind: text("kind").notNull().default("POPUP"),
@@ -764,6 +769,100 @@ export const decisionNotices = pgTable(
 );
 
 export type DecisionNotice = typeof decisionNotices.$inferSelect;
+
+/* ------------------------------------------------------------------ */
+/* Enterprise activity tracking                                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Per-agent, per-day interaction counters (clicks / actions / navigations /
+ * lead opens). One row per user+day — written with an atomic UPSERT so the
+ * live counter stays consistent with concurrent agents.
+ */
+export const agentClickUsage = pgTable(
+  "agent_click_usage",
+  {
+    id: serial("id").primaryKey(),
+    userId: uuid("user_id").notNull(),
+    day: text("day").notNull(),
+    clicks: integer("clicks").notNull().default(0),
+    actions: integer("actions").notNull().default(0),
+    navigations: integer("navigations").notNull().default(0),
+    leadOpens: integer("lead_opens").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("agent_click_usage_user_day_uq").on(t.userId, t.day)],
+);
+
+/**
+ * Every lead an agent opens: timestamp, the action that opened it, and how
+ * long the lead stayed open (durationMs) once the agent navigates away.
+ */
+export const leadOpenLogs = pgTable(
+  "lead_open_logs",
+  {
+    id: serial("id").primaryKey(),
+    leadId: integer("lead_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    // OPEN | CALL | WHATSAPP | STATUS_CHANGE | NOTE | EDIT | PROOF
+    action: text("action").notNull().default("OPEN"),
+    openedAt: timestamp("opened_at", { withTimezone: true }).defaultNow().notNull(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    durationMs: integer("duration_ms"),
+    path: text("path"),
+    platform: text("platform"),
+  },
+  (t) => [
+    index("lead_open_logs_user_idx").on(t.userId),
+    index("lead_open_logs_lead_idx").on(t.leadId),
+    index("lead_open_logs_opened_idx").on(t.openedAt),
+  ],
+);
+
+/**
+ * Raw interaction stream — every click, button interaction and navigation
+ * path, batched by the client and inserted with a single multi-row query.
+ */
+export const agentActivityEvents = pgTable(
+  "agent_activity_events",
+  {
+    id: serial("id").primaryKey(),
+    userId: uuid("user_id").notNull(),
+    sessionId: text("session_id"),
+    // CLICK | ACTION | NAVIGATION | LEAD_OPEN
+    eventType: text("event_type").notNull(),
+    target: text("target"),
+    path: text("path"),
+    meta: jsonb("meta"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("agent_activity_events_user_idx").on(t.userId),
+    index("agent_activity_events_created_idx").on(t.createdAt),
+    index("agent_activity_events_session_idx").on(t.sessionId),
+  ],
+);
+
+/** One row per browser session — powers the live "active working duration". */
+export const agentSessions = pgTable(
+  "agent_sessions",
+  {
+    id: serial("id").primaryKey(),
+    userId: uuid("user_id").notNull(),
+    sessionId: text("session_id").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow().notNull(),
+    activeSeconds: integer("active_seconds").notNull().default(0),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    platform: text("platform"),
+  },
+  (t) => [uniqueIndex("agent_sessions_session_uq").on(t.sessionId), index("agent_sessions_user_idx").on(t.userId)],
+);
+
+export type AgentClickUsage = typeof agentClickUsage.$inferSelect;
+export type LeadOpenLog = typeof leadOpenLogs.$inferSelect;
+export type AgentActivityEvent = typeof agentActivityEvents.$inferSelect;
+export type AgentSession = typeof agentSessions.$inferSelect;
 
 /* ------------------------------------------------------------------ */
 /* Companion-tooling tables (recreated app-managed equivalents so the  */
@@ -815,13 +914,31 @@ export const profiles = pgTable("profiles", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-/** Saved embed configurations from the Video iFrame Studio. */
-export const videoIframes = pgTable("video_iframes", {
-  id: serial("id").primaryKey(),
-  title: text("title").notNull(),
-  embedUrl: text("embed_url").notNull(),
-  theme: text("theme").notNull().default("wistia"),
-  isActive: boolean("is_active").notNull().default(true),
-  createdBy: uuid("created_by"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+
+/* ------------------------------------------------------------------ */
+/* STRICT lead sheet — table `leads` (exactly these 18 columns)        */
+/* ------------------------------------------------------------------ */
+export const crmLeads = pgTable(
+  "leads",
+  {
+    id: serial("id").primaryKey(),
+    leadCode: varchar("lead_code", { length: 40 }).notNull().unique(),
+    cityKeyword: text("city_keyword"),
+    gmapLink: text("gmap_link"),
+    title: text("title").notNull(),
+    rating: numeric("rating", { precision: 3, scale: 1 }).default("0"),
+    reviews: integer("reviews").default(0),
+    nicheOrCategory: text("niche_or_category"),
+    opensAt: text("opens_at"),
+    mobileNo: text("mobile_no"),
+    websiteStatus: text("website_status"),
+    website: text("website"),
+    statusService: text("status_service"),
+    callStatus: text("call_status"),
+    leadStatus: text("lead_status"),
+    leadCloseAmount: numeric("lead_close_amount", { precision: 12, scale: 2 }),
+    assignedAgentId: text("assigned_agent_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (t) => [index("crm_leads_agent_idx").on(t.assignedAgentId)],
+);

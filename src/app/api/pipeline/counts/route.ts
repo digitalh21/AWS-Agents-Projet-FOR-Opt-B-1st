@@ -49,7 +49,6 @@ export async function GET(request: Request) {
 
     const base = [
       eq(leads.archivedForAgent, false),
-      hidden.length > 0 ? (sql`${leads.nicheId} not in (${sql.join(hidden.map((id) => sql`${id}`), sql`, `)})` as never) : undefined,
       nicheId > 0 ? eq(leads.nicheId, nicheId) : undefined,
       owner ? eq(leads.assignedAgentId, owner) : undefined,
       q ? or(ilike(leads.businessName, `%${q}%`), ilike(leads.phone, `%${q}%`), ilike(leads.city, `%${q}%`)) : undefined,

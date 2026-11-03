@@ -47,7 +47,7 @@
     "tailwindcss": "4.1.17",
     "typescript": "5.9.3"
   }
-  "scripts": {
-  "pages:build": "npx --legacy-peer-deps @cloudflare/next-on-pages@1"
+"scripts": {
+  "pages:build": "npx --legacy-peer-deps @cloudflare/next-on-pages --experimental-minify"
 }
 }

@@ -1,4 +1,5 @@
 export const runtime = 'edge';
+export const runtime = 'edge';
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Toaster } from "sonner";

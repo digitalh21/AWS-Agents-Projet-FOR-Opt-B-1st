@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { leads, niches } from "@/db/schema";
